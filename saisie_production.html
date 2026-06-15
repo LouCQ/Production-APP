@@ -113,22 +113,29 @@
   /* Historique - timeline */
   .tl-wrap{overflow-x:auto; overflow-y:hidden; border:1px solid var(--border);
     border-radius:12px; background:#0d1422; padding:0; margin-bottom:14px;}
-  .tl-inner{position:relative; height:280px; min-width:100%;}
+  .tl-inner{position:relative; height:300px; min-width:100%;}
   .tl-axis{position:absolute; bottom:0; left:0; right:0; height:32px; border-top:1px solid var(--border);}
   .tl-gridline{position:absolute; top:0; bottom:32px; width:0; border-left:1px solid #243049;}
   .tl-tick{position:absolute; bottom:8px; font-size:11px; color:var(--muted); white-space:nowrap; transform:translateX(-50%); padding-left:0;}
   .tl-tick.start{font-weight:700; color:#cdd6e8; transform:translateX(0);}
   .tl-start-line{position:absolute; top:0; bottom:32px; width:0; border-left:2px solid var(--green); z-index:2;}
   .tl-start-flag{position:absolute; top:6px; display:flex; align-items:center; gap:4px; background:var(--green); color:#06251a; font-size:11px; font-weight:800; padding:3px 8px 3px 6px; border-radius:0 6px 6px 0; white-space:nowrap; z-index:4;}
-  .tl-base{position:absolute; left:0; right:0; top:60px; height:80px; background:#13203a; border-radius:6px;}
-  .tl-stop{position:absolute; top:60px; height:80px; background:var(--accent); opacity:.85;
+  .tl-base{position:absolute; left:0; right:0; top:55px; height:70px; background:#13203a; border-radius:6px;}
+  .tl-stop{position:absolute; top:55px; height:70px; background:var(--accent); opacity:.85;
     border-radius:4px; cursor:pointer;}
   .tl-stop:active{opacity:1;}
   .tl-rejet{position:absolute; top:30px; width:3px; background:var(--accent-dark); cursor:pointer;}
   .tl-rejet .q{position:absolute; top:-16px; left:50%; transform:translateX(-50%);
     font-size:11px; font-weight:800; color:var(--accent); white-space:nowrap;}
   .tl-silo{position:absolute; top:40px; bottom:32px; width:0; border-left:3px dashed var(--silo); cursor:pointer;}
-  .tl-sample{position:absolute; top:145px; height:40px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; font-weight:700; font-size:16px; transform:translateX(-50%); z-index:3; background:#0d1422; padding:0 4px;}
+  /* Plages d'échantillons : PROD (haut) et C.Q. (bas) */
+  .tl-lane{position:absolute; left:0; right:0; height:50px; background:rgba(127,179,255,0.035); border-top:1px dashed #20304d; border-bottom:1px dashed #20304d;}
+  .tl-lane-prod{top:140px;}
+  .tl-lane-cq{top:200px;}
+  .tl-lane-label{position:absolute; left:6px; font-size:9px; font-weight:800; letter-spacing:.5px; color:#5a6b8a; z-index:1;}
+  .tl-sample{position:absolute; height:46px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; font-weight:700; font-size:16px; transform:translateX(-50%); z-index:3; background:#0d1422; padding:0 4px;}
+  .tl-sample.lane-prod{top:142px;}
+  .tl-sample.lane-cq{top:202px;}
   .tl-sample.future{color:var(--muted);}
   .tl-sample.ok{color:var(--green);}
   .tl-sample.nc{color:var(--accent);}
@@ -934,7 +941,7 @@ function renderTimeline(){
   // Rejets
   state.entries.filter(e=>e.type==='rejet').forEach(e=>{
     const left=x(e.timestamp);
-    html+=`<div class="tl-rejet" style="left:${left}px;height:100px" onclick='showDetail(${JSON.stringify(JSON.stringify(e))})'><span class="q">${e.qty}</span></div>`;
+    html+=`<div class="tl-rejet" style="left:${left}px;height:95px" onclick='showDetail(${JSON.stringify(JSON.stringify(e))})'><span class="q">${e.qty}</span></div>`;
   });
   
   // Silos
@@ -943,42 +950,52 @@ function renderTimeline(){
     html+=`<div class="tl-silo" style="left:${left}px" onclick='showDetail(${JSON.stringify(JSON.stringify(e))})'></div>`;
   });
   
-  // Séquences avec échantillons associés
-  state.entries.filter(e=>e.type==='sequence').forEach(seq=>{
-    const left=x(seq.timestamp);
-    // Chercher l'échantillon le plus proche (dans les 5 secondes)
-    const assocEch=state.entries.find(e=>e.type==='echantillon'&&Math.abs(new Date(e.timestamp).getTime()-new Date(seq.timestamp).getTime())<5000);
-    const symbol=assocEch?(assocEch.conform===true?'✓':assocEch.conform===false?'✕':'○'):'+1';
-    const color=assocEch?(assocEch.conform===true?'var(--green)':assocEch.conform===false?'var(--accent)':'var(--muted)'):'var(--muted)';
-    const weight=assocEch?` ${assocEch.poids}g`:'';
-    const origin=assocEch&&assocEch.origin==='C.Q.'?'C.Q.':'';
-    html+=`<div class="tl-sample" style="left:${left}px;color:${color};" onclick='${assocEch?`showDetail(${JSON.stringify(JSON.stringify(assocEch))})`:''}'><div style="font-size:14px;font-weight:700;">${symbol}</div>${origin?`<div style="font-size:10px;">${origin}</div>`:''}${weight?`<div style="font-size:10px;">${weight}</div>`:''}</div>`;
-  });
+  // ===== PLAGES D'ÉCHANTILLONS (PROD en haut, C.Q. en bas) =====
+  html+='<div class="tl-lane tl-lane-prod"></div>';
+  html+='<div class="tl-lane tl-lane-cq"></div>';
+  html+='<div class="tl-lane-label" style="top:144px;">PROD</div>';
+  html+='<div class="tl-lane-label" style="top:204px;">C.Q.</div>';
   
-  // ===== ÉCHANTILLONS =====
   const sampleFreqMin=state.reminderMin||60;
   
   // Helper : un échantillon est-il associé à une séquence ?
   const isAssocToSeq=(sample)=>state.entries.some(s=>s.type==='sequence'&&Math.abs(new Date(s.timestamp).getTime()-new Date(sample.timestamp).getTime())<5000);
   
-  // 1) Afficher TOUS les échantillons réels à leur heure EXACTE (jamais perdus)
+  // Suivi anti-chevauchement séparé par plage
+  let lastX={prod:-999, cq:-999};
+  function placeSample(left, laneKey){
+    if(left-lastX[laneKey]<26){ left=lastX[laneKey]+26; }
+    lastX[laneKey]=left;
+    return left;
+  }
+  
+  // 1) Séquences (avec échantillon obligatoire associé) — toujours dans la plage PROD
+  state.entries.filter(e=>e.type==='sequence').slice().sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp)).forEach(seq=>{
+    let left=placeSample(x(seq.timestamp),'prod');
+    const assocEch=state.entries.find(e=>e.type==='echantillon'&&Math.abs(new Date(e.timestamp).getTime()-new Date(seq.timestamp).getTime())<5000);
+    const symbol=assocEch?(assocEch.conform===true?'✓':assocEch.conform===false?'✕':'○'):'';
+    const color=assocEch?(assocEch.conform===true?'var(--green)':assocEch.conform===false?'var(--accent)':'var(--muted)'):'var(--muted)';
+    const weight=assocEch&&assocEch.poids?` ${assocEch.poids}g`:'';
+    html+=`<div class="tl-sample lane-prod" style="left:${left}px;color:${color};" onclick='${assocEch?`showDetail(${JSON.stringify(JSON.stringify(assocEch))})`:''}'><div style="font-size:13px;font-weight:700;">+1${symbol?' '+symbol:''}</div>${weight?`<div style="font-size:10px;">${weight}</div>`:''}</div>`;
+  });
+  
+  // 2) Échantillons réels (non liés à une séquence) — répartis selon l'origine
   const realSamples=state.entries.filter(e=>e.type==='echantillon'&&!isAssocToSeq(e))
     .slice().sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
-  let lastSampleX=-999;
   realSamples.forEach(sample=>{
-    let left=x(sample.timestamp);
-    // Anti-chevauchement : si trop proche du précédent, décaler vers la droite
-    if(left-lastSampleX<26){ left=lastSampleX+26; }
-    lastSampleX=left;
+    const isCQ=sample.origin==='C.Q.';
+    const laneKey=isCQ?'cq':'prod';
+    const laneClass=isCQ?'lane-cq':'lane-prod';
+    let left=placeSample(x(sample.timestamp), laneKey);
     let status='future', symbol='○';
     if(sample.conform===true){ status='ok'; symbol='✓'; }
     else if(sample.conform===false){ status='nc'; symbol='✕'; }
     const time=new Date(sample.timestamp).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
-    const origin=sample.origin==='C.Q.'?'C.Q.':'';
-    html+=`<div class="tl-sample ${status}" style="left:${left}px" onclick='showDetail(${JSON.stringify(JSON.stringify(sample))})'><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div>${origin?`<div style="font-size:10px; color:inherit; margin-top:2px;">${origin}</div>`:''}</div>`;
+    const cqMark=isCQ?'<div style="font-size:10px; color:inherit; margin-top:2px;">C.Q.</div>':'';
+    html+=`<div class="tl-sample ${laneClass} ${status}" style="left:${left}px" onclick='showDetail(${JSON.stringify(JSON.stringify(sample))})'><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div>${cqMark}</div>`;
   });
   
-  // 2) Emplacements horaires théoriques (heures fixes) — seulement si AUCUN échantillon réel proche
+  // 3) Emplacements horaires théoriques (heures fixes) — plage PROD, seulement si aucun échantillon réel proche
   const firstSample=new Date(start);
   firstSample.setMinutes(0,0,0);
   while(firstSample.getTime()<=start){
@@ -986,17 +1003,15 @@ function renderTimeline(){
   }
   
   for(let t=firstSample.getTime(); t<=now+sampleFreqMin*60000; t+=sampleFreqMin*60000){
-    // Y a-t-il déjà un échantillon réel proche de cette heure ? (±demi-fréquence)
-    const hasRealSample=state.entries.some(e=>e.type==='echantillon'&&Math.abs(new Date(e.timestamp).getTime()-t)<sampleFreqMin*30000);
-    if(hasRealSample) continue; // déjà affiché à l'étape 1
+    const hasRealSample=state.entries.some(e=>e.type==='echantillon'&&e.origin!=='C.Q.'&&Math.abs(new Date(e.timestamp).getTime()-t)<sampleFreqMin*30000);
+    if(hasRealSample) continue;
     
     const left=x(new Date(t).toISOString());
     let status='future', symbol='○';
-    // Pas encore saisi : vérifier le retard (>5 min après l'heure prévue)
     const lateMin=(now-t)/60000;
     if(lateMin>5){ status='late'; symbol='!'; }
     const time=new Date(t).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
-    html+=`<div class="tl-sample ${status}" style="left:${left}px"><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div></div>`;
+    html+=`<div class="tl-sample lane-prod ${status}" style="left:${left}px"><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div></div>`;
   }
   
   // Maintenant — un seul marqueur
