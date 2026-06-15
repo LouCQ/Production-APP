@@ -223,13 +223,6 @@
       <div class="big-action ba-silo" onclick="go('trace')"><span class="bi">⇄</span><span class="bt">Changement silo</span></div>
       <div class="big-action ba-hist" onclick="go('hist')"><span class="bi">▤</span><span class="bt">Historique</span></div>
     </div>
-    <div class="card" style="margin-top:14px;">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div><div class="kl" style="font-size:11px; color:var(--muted);">Séquences complétées</div>
-        <div style="font-size:30px; font-weight:800;" id="seqCount">0</div></div>
-        <button class="btn btn-ghost btn-sm" onclick="addSequence()">+1 séquence</button>
-      </div>
-    </div>
   </div>
 
   <!-- REJETS -->
@@ -326,6 +319,19 @@
   <div class="screen" id="s-ech">
     <h2 class="scr-title"><span class="ico" style="color:var(--green)">⚗</span> Échantillon qualité</h2>
     <div class="card">
+      <span class="label">Type de saisie</span>
+      <div style="display:flex; gap:12px; margin-bottom:14px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="radio" name="echType" value="prod" checked onchange="setEchType('prod')">
+          <span style="font-size:14px;">Échantillon PROD</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="radio" name="echType" value="cq" onchange="setEchType('cq')">
+          <span style="font-size:14px;">Tournée C.Q.</span>
+        </label>
+      </div>
+    </div>
+    <div class="card">
       <div class="row"><span class="label">Poids (grammes)</span>
         <input id="echPoids" inputmode="decimal" placeholder="ex: 124.5"></div>
       <div class="row">
@@ -338,7 +344,7 @@
       <div id="critBlock"></div>
       <div class="row"><span class="label">Commentaire / observation</span>
         <textarea id="echComment" placeholder="Apparence, couleur, bavures…"></textarea></div>
-      <button class="btn btn-green" onclick="saveEch()">✓ Enregistrer l'échantillon</button>
+      <button class="btn btn-green btn-sticky" onclick="saveEch()">✓ Enregistrer l'échantillon</button>
     </div>
     <div class="seclabel">Échantillons du jour</div>
     <div class="card" id="echList"></div>
@@ -495,7 +501,11 @@ function renderCtx(){
   const bar=document.getElementById('ctxBar'), c=document.getElementById('ctxContent');
   bar.classList.toggle('stopped', !!state.activeStop);
   const p=state.production;
-  if(!p){ c.className='ctx-empty'; c.textContent='Aucune production active — configurez dans « Paramètres »'; return; }
+  if(!p){ 
+    c.className='';
+    c.innerHTML='<div style="text-align:center;padding:8px;"><div style="color:var(--muted);font-size:14px;margin-bottom:10px;">Aucune production active</div><button class="btn btn-primary btn-sm" style="width:auto;margin:0 auto;" onclick="go(\'param\')">Démarrer une production</button></div>';
+    return; 
+  }
   c.className='ctx-grid';
   // Fonction pour retirer les zéros de remplissage
   const stripZeros=v=>{if(!v)return v; const num=parseInt(v);return isNaN(num)?v:String(num);};
@@ -507,14 +517,46 @@ function renderCtx(){
     ['Qté/boîte',stripZeros(p.qtyPerBox)],
     ['Silo',stripZeros(p.silo)]
   ];
-  c.innerHTML=items.filter(i=>i[1]).map(i=>`<div class="ctx-item"><div class="l">${i[0]}</div><div class="v">${i[1]}</div></div>`).join('');
+  let html=items.filter(i=>i[1]).map(i=>`<div class="ctx-item"><div class="l">${i[0]}</div><div class="v">${i[1]}</div></div>`).join('');
+  
+  // Afficher le chrono si un arrêt est en cours
+  if(state.activeStop){
+    const sec=Math.round((Date.now()-new Date(state.activeStop.startTime))/1000);
+    const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+    const chrono=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+    html+=`<div class="ctx-item" style="grid-column:span 2;"><div class="l">ARRÊT EN COURS</div><div class="v" style="color:var(--accent);font-size:22px;">${chrono}</div></div>`;
+  }
+  
+  c.innerHTML=html;
 }
 
 function renderAccueil(){
-  document.getElementById('seqCount').textContent=state.sequences;
   const tile=document.getElementById('arretTile');
   tile.querySelector('.bt').textContent = state.activeStop ? 'Reprendre (arrêt en cours)' : 'Démarrer un arrêt';
   tile.querySelector('.bi').textContent = state.activeStop ? '▶' : '⏸';
+  
+  // Désactiver les boutons si pas de production
+  const hasProduction=!!(state.production&&state.production.piece);
+  
+  // Gros boutons de la grille
+  const actionBtns=document.querySelectorAll('.big-action');
+  actionBtns.forEach(btn=>{
+    btn.style.opacity=hasProduction?'1':'0.5';
+    btn.style.pointerEvents=hasProduction?'auto':'none';
+    btn.style.cursor=hasProduction?'pointer':'default';
+  });
+  
+  // Boutons du tabbar (sauf accueil et param)
+  const tabBtns=document.querySelectorAll('#tabbar button');
+  tabBtns.forEach(btn=>{
+    const section=btn.dataset.s;
+    const isAction=['rejet','arret','ech','hist','trace'].includes(section);
+    if(isAction){
+      btn.style.opacity=hasProduction?'1':'0.5';
+      btn.style.pointerEvents=hasProduction?'auto':'none';
+      btn.style.cursor=hasProduction?'pointer':'default';
+    }
+  });
 }
 
 
@@ -615,7 +657,8 @@ function toggleArretFromHome(){
     toast('Commencez une production d\'abord (Paramètres → Démarrer)',true); 
     go('param'); return; 
   }
-  go('arret'); if(!state.activeStop) toggleArret(); }
+  toggleArret(); 
+}
 function renderArretScreen(){
   const block=document.getElementById('arretTypeBlock'); block.style.display='none'; stopSel=null;
   document.getElementById('arretComment').value='';
@@ -631,22 +674,59 @@ function setArretRunning(run){
   else { b.textContent='⏸ Démarrer l\'arrêt'; b.className='btn btn-accent'; t.classList.remove('run'); }
 }
 function toggleArret(){
+  if(!state.production||!state.production.piece){ 
+    toast('Aucune production active',true); 
+    return; 
+  }
   if(!state.activeStop){
     state.activeStop={startTime:new Date().toISOString()}; save(); renderCtx();
     startTick(); setArretRunning(true);
   } else {
+    // Arrêt terminé : afficher le modal pour choisir la raison
     const end=new Date(), start=new Date(state.activeStop.startTime);
     const sec=Math.round((end-start)/1000);
     pendingStop={startTime:state.activeStop.startTime,endTime:end.toISOString(),durationSec:sec};
     state.activeStop=null; save(); renderCtx(); stopTick(); setArretRunning(false);
-    document.getElementById('arretDureeEcho').textContent=fmtDur(sec);
-    document.getElementById('arretStatus').textContent='Sélectionnez le type d\'arrêt';
-    document.getElementById('arretTypeBlock').style.display='block';
-    renderStopTypes();
+    
+    // Afficher le modal de choix de raison
+    const body=document.getElementById('modalBody');
+    const title=document.getElementById('modalTitle');
+    title.textContent='Sélectionner le type d\'arrêt';
+    
+    let html='<div style="margin-bottom:14px;"><span class="label">Durée enregistrée : <b style="color:var(--amber);font-size:16px;">'+fmtDur(sec)+'</b></span></div>';
+    html+='<input class="opt-search" id="modalStopSearch" placeholder="Rechercher un type…" oninput="renderModalStops()" style="margin-bottom:12px;">';
+    html+='<div class="opt-grid" id="modalStopGrid"></div>';
+    html+='<div style="margin-top:14px;"><span class="label">Commentaire (optionnel)</span><textarea id="modalStopComment" placeholder="Détails…" style="width:100%;"></textarea></div>';
+    
+    body.innerHTML=html;
+    renderModalStops();
+    document.getElementById('modalBg').classList.add('show');
   }
 }
+
+function renderModalStops(){
+  const q=document.getElementById('modalStopSearch')?.value.toLowerCase()||'';
+  document.getElementById('modalStopGrid').innerHTML=state.stops.filter(s=>!q||s.desc.toLowerCase().includes(q)||s.code.toLowerCase().includes(q))
+    .map(s=>`<div class="opt" onclick="selectAndSaveStop('${s.code}')" style="cursor:pointer;"><span class="code">${s.code}</span>${s.desc}</div>`).join('');
+}
+
+function selectAndSaveStop(code){
+  const s=state.stops.find(x=>x.code===code);
+  const e={id:uid(),type:'arret',timestamp:pendingStop.startTime,startTime:pendingStop.startTime,
+    endTime:pendingStop.endTime,durationSec:pendingStop.durationSec,
+    stopCode:s.code,stopDesc:s.desc,comment:document.getElementById('modalStopComment')?.value||'',...ctxSnap()};
+  state.entries.push(e); save(); pushSheets(e); pendingStop=null;
+  closeModal();
+  toast('Arrêt enregistré ✓');
+}
 let pendingStop=null;
-function startTick(){ stopTick(); arretInt=setInterval(()=>{ const s=Math.round((Date.now()-new Date(state.activeStop.startTime))/1000); document.getElementById('arretTimer').textContent=fmtDur(s); },500); }
+function startTick(){ stopTick(); arretInt=setInterval(()=>{ 
+  const s=Math.round((Date.now()-new Date(state.activeStop.startTime))/1000); 
+  document.getElementById('arretTimer').textContent=fmtDur(s);
+  renderCtx(); // Mettre à jour le chrono dans l'entête
+  // Mettre à jour la timeline si l'utilisateur est sur l'onglet Historique
+  if(document.getElementById('timeline')) renderTimeline();
+}, 500); }
 function stopTick(){ if(arretInt) clearInterval(arretInt); arretInt=null; }
 function renderStopTypes(){
   const q=document.getElementById('arretSearch').value.toLowerCase();
@@ -705,14 +785,16 @@ function saveSilo(){
 /* ============================================================
    ÉCHANTILLONS
    ============================================================ */
-let echConform=null, echCrit={};
+let echConform=null, echCrit={}, echType='prod';
+function setEchType(t){ echType=t; }
 function renderEch(){
-  echConform=null; echCrit={};
+  echConform=null; echCrit={}; echType='prod';
   document.getElementById('echPoids').value=''; document.getElementById('echComment').value='';
   document.getElementById('chipC').classList.remove('on'); document.getElementById('chipNC').classList.remove('on');
+  document.querySelector('input[name="echType"][value="prod"]').checked=true;
   document.getElementById('critBlock').innerHTML = state.criteria.length ? '<span class="label">Critères qualité</span>'+
     state.criteria.map((c,i)=>`<span class="chip" id="crit${i}" onclick="toggleCrit(${i})">${c}</span>`).join('') : '';
-  const list=state.entries.filter(e=>e.type==='echantillon'&&isToday(e.timestamp)).slice().reverse();
+  const list=state.entries.filter(e=>(e.type==='echantillon')&&isToday(e.timestamp)).slice().reverse();
   document.getElementById('echList').innerHTML = list.length? list.map(e=>entryRow(e)).join('') : '<div class="hint">Aucun échantillon aujourd\'hui.</div>';
 }
 function setConform(v){ echConform=v;
@@ -723,7 +805,7 @@ function toggleCrit(i){ echCrit[state.criteria[i]]=!echCrit[state.criteria[i]];
 function saveEch(){
   if(echConform===null){ toast('Indiquez conforme / non conforme',true); return; }
   const e={id:uid(),type:'echantillon',timestamp:new Date().toISOString(),
-    poids:val('echPoids'),conform:echConform,criteres:echCrit,comment:val('echComment'),...ctxSnap()};
+    poids:val('echPoids'),conform:echConform,criteres:echCrit,comment:val('echComment'),origin:echType==='cq'?'C.Q.':'PROD',...ctxSnap()};
   state.entries.push(e); state.lastSampleTime=e.timestamp; save(); pushSheets(e);
   hideSampleAlert(); toast('Échantillon enregistré ✓'); go('accueil');
 }
@@ -758,11 +840,18 @@ function renderTimeline(){
   const x=t=>((new Date(t).getTime()-start)/60000)*PXMIN;
   let html='<div class="tl-base"></div>';
   
-  // Arrêts
+  // Arrêts finalisés
   state.entries.filter(e=>e.type==='arret').forEach(e=>{
     const left=x(e.startTime), w=Math.max(3,(e.durationSec/60)*PXMIN);
     html+=`<div class="tl-stop" style="left:${left}px;width:${w}px" onclick='showDetail(${JSON.stringify(JSON.stringify(e))})'></div>`;
   });
+  
+  // Arrêt en cours (non finalisé)
+  if(state.activeStop){
+    const left=x(state.activeStop.startTime);
+    const w=Math.max(3,(Date.now()-new Date(state.activeStop.startTime).getTime())/60000*PXMIN);
+    html+=`<div class="tl-stop" style="left:${left}px;width:${w}px;opacity:1;border:2px solid var(--accent);"></div>`;
+  }
   
   // Rejets
   state.entries.filter(e=>e.type==='rejet').forEach(e=>{
@@ -785,7 +874,8 @@ function renderTimeline(){
     const status=sample?(sample.conform?'ok':'nc'):'future';
     const symbol=status==='ok'?'✓':status==='nc'?'✕':'○';
     const time=new Date(t).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
-    html+=`<div class="tl-sample ${status}" style="left:${left}px" onclick='${sample?`showDetail(${JSON.stringify(JSON.stringify(sample))})`:''}'><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div></div>`;
+    const origin=sample?sample.origin||'PROD':'';
+    html+=`<div class="tl-sample ${status}" style="left:${left}px" onclick='${sample?`showDetail(${JSON.stringify(JSON.stringify(sample))})`:''}'><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div>${origin?`<div style="font-size:10px; color:inherit; margin-top:2px;">${origin}</div>`:''}</div>`;
   }
   
   // Maintenant
