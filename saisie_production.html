@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -57,6 +58,9 @@
     border:none; border-radius:12px; padding:16px; font-size:16px; font-weight:700;
     cursor:pointer; font-family:inherit; transition:transform .08s;}
   .btn:active{transform:scale(.97);}
+  .btn-sticky{position:sticky; bottom:0; background:var(--panel2); padding:14px; margin:0 -14px -14px; border-top:1px solid var(--border); z-index:10;}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  .btn:disabled:active{transform:none;}
   .btn-primary{background:var(--panel2); color:#fff;}
   .btn-accent{background:var(--accent); color:#fff;}
   .btn-green{background:var(--green); color:#04302c;}
@@ -108,23 +112,31 @@
 
   /* Historique - timeline */
   .tl-wrap{overflow-x:auto; overflow-y:hidden; border:1px solid var(--border);
-    border-radius:12px; background:#0d1422; padding:0;}
-  .tl-inner{position:relative; height:160px; min-width:100%;}
-  .tl-axis{position:absolute; bottom:0; left:0; right:0; height:26px; border-top:1px solid var(--border);}
-  .tl-tick{position:absolute; bottom:0; height:26px; border-left:1px solid #243049;
-    font-size:10px; color:var(--muted); padding:2px 0 0 3px; white-space:nowrap;}
-  .tl-base{position:absolute; left:0; right:0; top:42px; height:46px; background:#13203a; border-radius:6px;}
-  .tl-stop{position:absolute; top:42px; height:46px; background:var(--accent); opacity:.85;
+    border-radius:12px; background:#0d1422; padding:0; margin-bottom:14px;}
+  .tl-inner{position:relative; height:280px; min-width:100%;}
+  .tl-axis{position:absolute; bottom:0; left:0; right:0; height:32px; border-top:1px solid var(--border);}
+  .tl-tick{position:absolute; bottom:0; height:32px; border-left:1px solid #243049;
+    font-size:11px; color:var(--muted); padding:3px 0 0 4px; white-space:nowrap;}
+  .tl-base{position:absolute; left:0; right:0; top:60px; height:80px; background:#13203a; border-radius:6px;}
+  .tl-stop{position:absolute; top:60px; height:80px; background:var(--accent); opacity:.85;
     border-radius:4px; cursor:pointer;}
   .tl-stop:active{opacity:1;}
   .tl-rejet{position:absolute; top:30px; width:3px; background:var(--accent-dark); cursor:pointer;}
   .tl-rejet .q{position:absolute; top:-16px; left:50%; transform:translateX(-50%);
     font-size:11px; font-weight:800; color:var(--accent); white-space:nowrap;}
-  .tl-silo{position:absolute; top:20px; bottom:26px; width:0; border-left:3px dashed var(--silo); cursor:pointer;}
-  .tl-now{position:absolute; top:20px; bottom:26px; width:2px; background:var(--green);}
-  .tl-legend{display:flex; flex-wrap:wrap; gap:14px; margin:10px 2px; font-size:12px; color:var(--muted);}
-  .tl-legend span{display:flex; align-items:center; gap:6px;}
-  .lg-dot{width:14px; height:6px; border-radius:2px; display:inline-block;}
+  .tl-silo{position:absolute; top:40px; bottom:32px; width:0; border-left:3px dashed var(--silo); cursor:pointer;}
+  .tl-sample{position:absolute; top:145px; height:40px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; font-weight:700; font-size:16px;}
+  .tl-sample.future{color:var(--muted);}
+  .tl-sample.ok{color:var(--green);}
+  .tl-sample.nc{color:var(--accent);}
+  .tl-sample.late{color:var(--amber);}
+  .tl-now-marker{position:absolute; top:50px; bottom:32px; width:0; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .tl-now-marker::before{content:'▼'; position:absolute; top:-18px; font-size:16px; color:#7FB3FF;}
+  .tl-now-marker::after{content:'▲'; position:absolute; bottom:-18px; font-size:16px; color:#7FB3FF;}
+  .tl-now-line{width:2px; height:100%; background:#7FB3FF; position:relative;}
+  .tl-legend{display:flex; flex-wrap:wrap; gap:12px; margin:10px 0 14px; font-size:12px; color:var(--muted); background:var(--color-background-secondary); border-radius:12px; padding:10px 14px;}
+  .tl-legend span{display:flex; align-items:center; gap:5px;}
+  .lg-symbol{font-weight:700; font-size:14px;}
 
   /* Résumé KPI */
   .kpi-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
@@ -203,10 +215,6 @@
   <!-- ACCUEIL -->
   <div class="screen active" id="s-accueil">
     <h2 class="scr-title"><span class="ico">⚙️</span> Saisie production</h2>
-    <div class="card" style="padding:12px 14px;">
-      <span class="label">Opérateur</span>
-      <select id="selOperateur" onchange="setOperateur()"><option value="">— Choisir —</option></select>
-    </div>
     <div class="home-actions">
       <div class="big-action ba-rejet" onclick="startRejet()"><span class="bi">▣</span><span class="bt">Ajouter un rejet</span></div>
       <div class="big-action ba-arret" id="arretTile" onclick="toggleArretFromHome()"><span class="bi">⏸</span><span class="bt">Démarrer un arrêt</span></div>
@@ -253,8 +261,8 @@
           <textarea id="rejetComment" placeholder="Détails…"></textarea>
         </div>
       </div>
-      <button class="btn btn-accent" onclick="saveRejet()">✓ Enregistrer le rejet</button>
-      <button class="btn btn-ghost" style="margin-top:10px;" onclick="rejetBackToQty()">← Modifier la quantité</button>
+      <button class="btn btn-accent btn-sticky" onclick="saveRejet()">✓ Enregistrer le rejet</button>
+      <button class="btn btn-ghost btn-sticky" style="margin-top:10px; background:var(--card); margin-bottom:0;" onclick="rejetBackToQty()">← Modifier la quantité</button>
     </div>
   </div>
 
@@ -277,7 +285,7 @@
           <textarea id="arretComment" placeholder="Détails…"></textarea>
         </div>
       </div>
-      <button class="btn btn-amber" onclick="saveArret()">✓ Enregistrer l'arrêt</button>
+      <button class="btn btn-amber btn-sticky" onclick="saveArret()">✓ Enregistrer l'arrêt</button>
     </div>
   </div>
 
@@ -285,10 +293,11 @@
   <div class="screen" id="s-hist">
     <h2 class="scr-title"><span class="ico">▤</span> Historique</h2>
     <div class="tl-legend">
-      <span><i class="lg-dot" style="background:var(--accent)"></i> Arrêt</span>
-      <span><i class="lg-dot" style="background:var(--accent-dark)"></i> Rejet</span>
-      <span><i class="lg-dot" style="background:var(--silo)"></i> Silo</span>
-      <span><i class="lg-dot" style="background:var(--green)"></i> Maintenant</span>
+      <span><span class="lg-symbol" style="color:var(--green);">✓</span> Conforme</span>
+      <span><span class="lg-symbol" style="color:var(--accent);">✕</span> Non conforme</span>
+      <span><span class="lg-symbol" style="color:var(--muted);">○</span> À venir</span>
+      <span><span class="lg-symbol" style="color:var(--amber);">!</span> En retard</span>
+      <span><span class="lg-symbol" style="color:#7FB3FF;">▼│▲</span> Maintenant</span>
     </div>
     <div class="tl-wrap"><div class="tl-inner" id="timeline"></div></div>
     <div class="hint" style="margin:8px 2px 16px;">Touchez un élément de la bande pour voir le détail.</div>
@@ -488,20 +497,26 @@ function renderCtx(){
   const p=state.production;
   if(!p){ c.className='ctx-empty'; c.textContent='Aucune production active — configurez dans « Paramètres »'; return; }
   c.className='ctx-grid';
-  const items=[['Pièce',p.piece],['BT',p.bt],['Presse',p.presse],['Séquence',p.sequence],['Qté/boîte',p.qtyPerBox],['Silo',p.silo]];
+  // Fonction pour retirer les zéros de remplissage
+  const stripZeros=v=>{if(!v)return v; const num=parseInt(v);return isNaN(num)?v:String(num);};
+  const items=[
+    ['Pièce',p.piece],
+    ['BT',p.bt],
+    ['Presse',p.presse],
+    ['Séquence',stripZeros(p.sequence)],
+    ['Qté/boîte',stripZeros(p.qtyPerBox)],
+    ['Silo',stripZeros(p.silo)]
+  ];
   c.innerHTML=items.filter(i=>i[1]).map(i=>`<div class="ctx-item"><div class="l">${i[0]}</div><div class="v">${i[1]}</div></div>`).join('');
 }
 
 function renderAccueil(){
-  const sel=document.getElementById('selOperateur'), cur=state.production?.operateur||'';
-  sel.innerHTML='<option value="">— Choisir —</option>'+state.operateurs.map(o=>`<option ${o===cur?'selected':''}>${o}</option>`).join('');
   document.getElementById('seqCount').textContent=state.sequences;
   const tile=document.getElementById('arretTile');
   tile.querySelector('.bt').textContent = state.activeStop ? 'Reprendre (arrêt en cours)' : 'Démarrer un arrêt';
   tile.querySelector('.bi').textContent = state.activeStop ? '▶' : '⏸';
 }
-function setOperateur(){ if(!state.production) state.production={piece:'',bt:'',presse:'',qtyPerBox:'',sequence:'',silo:'',startTime:new Date().toISOString()};
-  state.production.operateur=document.getElementById('selOperateur').value; save(); renderCtx(); }
+
 
 /* ============================================================
    PARAMÈTRES PRODUCTION + SCAN QR
@@ -552,7 +567,12 @@ function stopCamera(){ if(qrScanner){ qrScanner.stop().then(()=>qrScanner.clear(
    REJETS
    ============================================================ */
 let numBuf="0", causeSel=null;
-function startRejet(){ numBuf="0"; causeSel=null;
+function startRejet(){ 
+  if(!state.production||!state.production.piece){ 
+    toast('Commencez une production d\'abord (Paramètres → Démarrer)',true); 
+    go('param'); return; 
+  }
+  numBuf="0"; causeSel=null;
   document.getElementById('rejetStep1').style.display='block';
   document.getElementById('rejetStep2').style.display='none';
   document.getElementById('numDisp').textContent='0';
@@ -590,7 +610,12 @@ function ctxSnap(){ const p=state.production||{}; return {piece:p.piece||'',bt:p
    ARRÊTS (deux temps)
    ============================================================ */
 let arretInt=null, stopSel=null;
-function toggleArretFromHome(){ go('arret'); if(!state.activeStop) toggleArret(); }
+function toggleArretFromHome(){ 
+  if(!state.production||!state.production.piece){ 
+    toast('Commencez une production d\'abord (Paramètres → Démarrer)',true); 
+    go('param'); return; 
+  }
+  go('arret'); if(!state.activeStop) toggleArret(); }
 function renderArretScreen(){
   const block=document.getElementById('arretTypeBlock'); block.style.display='none'; stopSel=null;
   document.getElementById('arretComment').value='';
@@ -643,7 +668,21 @@ function fmtDur(sec){ const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s
 /* ============================================================
    SÉQUENCES
    ============================================================ */
-function addSequence(){ state.sequences++; save(); renderAccueil(); toast('Séquence +1 ✓'); }
+function addSequence(){ 
+  state.sequences++; 
+  // Incrémente aussi le champ de séquence si format "X/Y"
+  if(state.production?.sequence){
+    const parts=state.production.sequence.split('/');
+    if(parts.length===2){
+      const current=parseInt(parts[0])||0;
+      state.production.sequence=(current+1)+'/'+parts[1];
+    }
+  }
+  save(); 
+  renderAccueil(); 
+  renderCtx();
+  toast('Séquence +1 ✓'); 
+}
 
 /* ============================================================
    TRAÇABILITÉ / SILO
@@ -712,39 +751,68 @@ function renderTimeline(){
   if(!state.production||!state.production.startTime){ tl.innerHTML='<div class="hint" style="padding:20px;">Aucune production active.</div>'; return; }
   const start=new Date(state.production.startTime).getTime();
   const now=Date.now();
-  const totalMin=Math.max(10,(now-start)/60000);
-  const PXMIN=Math.max(6, Math.min(14, 700/totalMin)); // adapte l'échelle
-  const W=Math.max(700, totalMin*PXMIN);
+  const totalMin=Math.max(20,(now-start)/60000);
+  const PXMIN=Math.max(4, Math.min(8, 900/totalMin));
+  const W=Math.max(900, totalMin*PXMIN);
   tl.style.width=W+'px';
   const x=t=>((new Date(t).getTime()-start)/60000)*PXMIN;
   let html='<div class="tl-base"></div>';
-  // arrêts
+  
+  // Arrêts
   state.entries.filter(e=>e.type==='arret').forEach(e=>{
     const left=x(e.startTime), w=Math.max(3,(e.durationSec/60)*PXMIN);
     html+=`<div class="tl-stop" style="left:${left}px;width:${w}px" onclick='showDetail(${JSON.stringify(JSON.stringify(e))})'></div>`;
   });
-  // rejets
+  
+  // Rejets
   state.entries.filter(e=>e.type==='rejet').forEach(e=>{
     const left=x(e.timestamp);
-    html+=`<div class="tl-rejet" style="left:${left}px;height:58px" onclick='showDetail(${JSON.stringify(JSON.stringify(e))})'><span class="q">${e.qty}</span></div>`;
+    html+=`<div class="tl-rejet" style="left:${left}px;height:100px" onclick='showDetail(${JSON.stringify(JSON.stringify(e))})'><span class="q">${e.qty}</span></div>`;
   });
-  // silo
+  
+  // Silos
   state.entries.filter(e=>e.type==='silo').forEach(e=>{
     const left=x(e.timestamp);
     html+=`<div class="tl-silo" style="left:${left}px" onclick='showDetail(${JSON.stringify(JSON.stringify(e))})'></div>`;
   });
-  // maintenant
-  html+=`<div class="tl-now" style="left:${x(new Date().toISOString())}px"></div>`;
-  // axe horaire
-  html+='<div class="tl-axis"></div>';
-  const stepMin = totalMin>240?60: totalMin>60?30:15;
-  for(let m=0;m<=totalMin;m+=stepMin){
-    const d=new Date(start+m*60000);
-    html+=`<div class="tl-tick" style="left:${m*PXMIN}px">${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}</div>`;
+  
+  // Échantillons avec statut
+  const sampleFreqMin=state.reminderMin||60;
+  const nextSampleTime=state.lastSampleTime?new Date(state.lastSampleTime).getTime()+sampleFreqMin*60000:start+sampleFreqMin*60000;
+  for(let t=nextSampleTime;t<=now;t+=sampleFreqMin*60000){
+    const sample=state.entries.find(e=>e.type==='echantillon'&&Math.abs(new Date(e.timestamp).getTime()-t)<sampleFreqMin*30000);
+    const left=x(new Date(t).toISOString());
+    const status=sample?(sample.conform?'ok':'nc'):'future';
+    const symbol=status==='ok'?'✓':status==='nc'?'✕':'○';
+    const time=new Date(t).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
+    html+=`<div class="tl-sample ${status}" style="left:${left}px" onclick='${sample?`showDetail(${JSON.stringify(JSON.stringify(sample))})`:''}'><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div></div>`;
   }
+  
+  // Maintenant
+  const nowPos=x(new Date().toISOString());
+  html+=`<div class="tl-now-marker" style="left:${nowPos}px"><div class="tl-now-line"></div></div>`;
+  
+  // Axe horaire avec incréments de 10 min
+  html+='<div class="tl-axis"></div>';
+  const startHour=new Date(start).getHours();
+  const startMin=Math.ceil(new Date(start).getMinutes()/10)*10;
+  let tick=startMin===60?0:startMin;
+  let tickHour=startMin===60?startHour+1:startHour;
+  
+  // Affiche le démarrage comme référence
+  html+=`<div class="tl-tick" style="left:0px; font-weight:700;">Démarrage</div>`;
+  
+  // Affiche ensuite tous les 10 minutes
+  for(let m=10;m<=totalMin;m+=10){
+    const tickPos=m*PXMIN;
+    const tickTime=new Date(start+m*60000).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
+    html+=`<div class="tl-tick" style="left:${tickPos}px">${tickTime}</div>`;
+  }
+  
   tl.innerHTML=html;
   document.querySelector('.tl-wrap').scrollLeft=W;
 }
+
 
 function renderKPI(){
   const p=state.production; const g=document.getElementById('kpiGrid');
