@@ -115,8 +115,11 @@
     border-radius:12px; background:#0d1422; padding:0; margin-bottom:14px;}
   .tl-inner{position:relative; height:280px; min-width:100%;}
   .tl-axis{position:absolute; bottom:0; left:0; right:0; height:32px; border-top:1px solid var(--border);}
-  .tl-tick{position:absolute; bottom:0; height:32px; border-left:1px solid #243049;
-    font-size:11px; color:var(--muted); padding:3px 0 0 4px; white-space:nowrap;}
+  .tl-gridline{position:absolute; top:0; bottom:32px; width:0; border-left:1px solid #243049;}
+  .tl-tick{position:absolute; bottom:8px; font-size:11px; color:var(--muted); white-space:nowrap; transform:translateX(-50%); padding-left:0;}
+  .tl-tick.start{font-weight:700; color:#cdd6e8; transform:translateX(0);}
+  .tl-start-line{position:absolute; top:0; bottom:32px; width:0; border-left:2px solid var(--green); z-index:2;}
+  .tl-start-flag{position:absolute; top:6px; display:flex; align-items:center; gap:4px; background:var(--green); color:#06251a; font-size:11px; font-weight:800; padding:3px 8px 3px 6px; border-radius:0 6px 6px 0; white-space:nowrap; z-index:4;}
   .tl-base{position:absolute; left:0; right:0; top:60px; height:80px; background:#13203a; border-radius:6px;}
   .tl-stop{position:absolute; top:60px; height:80px; background:var(--accent); opacity:.85;
     border-radius:4px; cursor:pointer;}
@@ -125,7 +128,7 @@
   .tl-rejet .q{position:absolute; top:-16px; left:50%; transform:translateX(-50%);
     font-size:11px; font-weight:800; color:var(--accent); white-space:nowrap;}
   .tl-silo{position:absolute; top:40px; bottom:32px; width:0; border-left:3px dashed var(--silo); cursor:pointer;}
-  .tl-sample{position:absolute; top:145px; height:40px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; font-weight:700; font-size:16px;}
+  .tl-sample{position:absolute; top:145px; height:40px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; font-weight:700; font-size:16px; transform:translateX(-50%); z-index:3; background:#0d1422; padding:0 4px;}
   .tl-sample.future{color:var(--muted);}
   .tl-sample.ok{color:var(--green);}
   .tl-sample.nc{color:var(--accent);}
@@ -907,7 +910,8 @@ function renderTimeline(){
   if(!state.production||!state.production.startTime){ tl.innerHTML='<div class="hint" style="padding:20px;">Aucune production active.</div>'; return; }
   const start=new Date(state.production.startTime).getTime();
   const now=Date.now();
-  const totalMin=Math.max(20,(now-start)/60000);
+  const FUTURE_MIN=60;  // afficher 1 heure dans le futur
+  const totalMin=Math.max(20,(now-start)/60000)+FUTURE_MIN;
   const PXMIN=Math.max(4, Math.min(8, 900/totalMin));
   const W=Math.max(900, totalMin*PXMIN);
   tl.style.width=W+'px';
@@ -951,10 +955,18 @@ function renderTimeline(){
     html+=`<div class="tl-sample" style="left:${left}px;color:${color};" onclick='${assocEch?`showDetail(${JSON.stringify(JSON.stringify(assocEch))})`:''}'><div style="font-size:14px;font-weight:700;">${symbol}</div>${origin?`<div style="font-size:10px;">${origin}</div>`:''}${weight?`<div style="font-size:10px;">${weight}</div>`:''}</div>`;
   });
   
-  // Échantillons avec statut (affichage théorique des échantillons attendus)
+  // Échantillons horaires aux HEURES FIXES (08:00, 09:00...) selon la fréquence
   const sampleFreqMin=state.reminderMin||60;
-  const nextSampleTime=state.lastSampleTime?new Date(state.lastSampleTime).getTime()+sampleFreqMin*60000:start+sampleFreqMin*60000;
-  for(let t=nextSampleTime;t<=now;t+=sampleFreqMin*60000){
+  // Premier point horaire fixe après le démarrage
+  const firstSample=new Date(start);
+  firstSample.setMinutes(0,0,0);
+  // Avancer au prochain multiple de la fréquence (en minutes depuis minuit)
+  while(firstSample.getTime()<=start){
+    firstSample.setMinutes(firstSample.getMinutes()+sampleFreqMin);
+  }
+  
+  for(let t=firstSample.getTime(); t<=now+sampleFreqMin*60000; t+=sampleFreqMin*60000){
+    // Chercher un échantillon réel proche de cette heure (±demi-fréquence)
     const sample=state.entries.find(e=>e.type==='echantillon'&&Math.abs(new Date(e.timestamp).getTime()-t)<sampleFreqMin*30000);
     // Ne pas afficher si c'est déjà associé à une séquence
     const isAssocToSeq=sample&&state.entries.find(s=>s.type==='sequence'&&Math.abs(new Date(s.timestamp).getTime()-new Date(sample.timestamp).getTime())<5000);
@@ -965,35 +977,47 @@ function renderTimeline(){
     if(sample){
       if(sample.conform===true){ status='ok'; symbol='✓'; }
       else if(sample.conform===false){ status='nc'; symbol='✕'; }
+    } else {
+      // Pas encore saisi : vérifier le retard (>5 min après l'heure prévue)
+      const lateMin=(now-t)/60000;
+      if(lateMin>5){ status='late'; symbol='!'; }
     }
     const time=new Date(t).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
     const origin=sample&&sample.origin==='C.Q.'?'C.Q.':'';
     html+=`<div class="tl-sample ${status}" style="left:${left}px" onclick='${sample?`showDetail(${JSON.stringify(JSON.stringify(sample))})`:''}'><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div>${origin?`<div style="font-size:10px; color:inherit; margin-top:2px;">${origin}</div>`:''}</div>`;
   }
   
-  // Maintenant
+  // Maintenant — un seul marqueur
   const nowPos=x(new Date().toISOString());
   html+=`<div class="tl-now-marker" style="left:${nowPos}px"><div class="tl-now-line"></div></div>`;
   
-  // Axe horaire avec incréments de 10 min
+  // Axe horaire — repères aux quarts d'heure RÉELS (12h00, 12h15, 12h30...)
   html+='<div class="tl-axis"></div>';
-  const startHour=new Date(start).getHours();
-  const startMin=Math.ceil(new Date(start).getMinutes()/10)*10;
-  let tick=startMin===60?0:startMin;
-  let tickHour=startMin===60?startHour+1:startHour;
   
-  // Affiche le démarrage comme référence
-  html+=`<div class="tl-tick" style="left:0px; font-weight:700;">Démarrage</div>`;
+  // Démarrage : repère visuel distinct (ligne verte + drapeau + heure)
+  const startLabel=new Date(start).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
+  html+=`<div class="tl-start-line" style="left:0px"></div>`;
+  html+=`<div class="tl-start-flag" style="left:0px">▶ Démarrage</div>`;
+  html+=`<div class="tl-tick start" style="left:2px">${startLabel}</div>`;
   
-  // Affiche ensuite tous les 10 minutes
-  for(let m=10;m<=totalMin;m+=10){
-    const tickPos=m*PXMIN;
-    const tickTime=new Date(start+m*60000).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
-    html+=`<div class="tl-tick" style="left:${tickPos}px">${tickTime}</div>`;
+  // Premier quart d'heure réel APRÈS le démarrage
+  const startDate=new Date(start);
+  const firstQuarter=new Date(start);
+  firstQuarter.setSeconds(0,0);
+  const min=firstQuarter.getMinutes();
+  firstQuarter.setMinutes(Math.ceil(min/15)*15);
+  // Si on tombe pile sur le démarrage, avancer au prochain quart
+  if(firstQuarter.getTime()<=start) firstQuarter.setMinutes(firstQuarter.getMinutes()+15);
+  
+  for(let qt=firstQuarter.getTime(); qt<=now+FUTURE_MIN*60000; qt+=15*60000){
+    const tickPos=((qt-start)/60000)*PXMIN;
+    const d=new Date(qt);
+    const label=String(d.getHours()).padStart(2,'0')+'h'+String(d.getMinutes()).padStart(2,'0');
+    html+=`<div class="tl-gridline" style="left:${tickPos}px"></div>`;
+    html+=`<div class="tl-tick" style="left:${tickPos}px">${label}</div>`;
   }
   
   tl.innerHTML=html;
-  document.querySelector('.tl-wrap').scrollLeft=W;
 }
 
 
