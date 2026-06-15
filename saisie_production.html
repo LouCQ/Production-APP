@@ -944,10 +944,10 @@ function renderTimeline(){
     const left=x(seq.timestamp);
     // Chercher l'échantillon le plus proche (dans les 5 secondes)
     const assocEch=state.entries.find(e=>e.type==='echantillon'&&Math.abs(new Date(e.timestamp).getTime()-new Date(seq.timestamp).getTime())<5000);
-    const symbol=assocEch?(assocEch.conform?'✓':'✕'):'+1';
-    const color=assocEch?(assocEch.conform?'var(--green)':'var(--accent)'):'var(--muted)';
+    const symbol=assocEch?(assocEch.conform===true?'✓':assocEch.conform===false?'✕':'○'):'+1';
+    const color=assocEch?(assocEch.conform===true?'var(--green)':assocEch.conform===false?'var(--accent)':'var(--muted)'):'var(--muted)';
     const weight=assocEch?` ${assocEch.poids}g`:'';
-    const origin=assocEch?assocEch.origin||'PROD':'';
+    const origin=assocEch&&assocEch.origin==='C.Q.'?'C.Q.':'';
     html+=`<div class="tl-sample" style="left:${left}px;color:${color};" onclick='${assocEch?`showDetail(${JSON.stringify(JSON.stringify(assocEch))})`:''}'><div style="font-size:14px;font-weight:700;">${symbol}</div>${origin?`<div style="font-size:10px;">${origin}</div>`:''}${weight?`<div style="font-size:10px;">${weight}</div>`:''}</div>`;
   });
   
@@ -961,10 +961,13 @@ function renderTimeline(){
     if(isAssocToSeq) continue;
     
     const left=x(new Date(t).toISOString());
-    const status=sample?(sample.conform?'ok':'nc'):'future';
-    const symbol=status==='ok'?'✓':status==='nc'?'✕':'○';
+    let status='future', symbol='○';
+    if(sample){
+      if(sample.conform===true){ status='ok'; symbol='✓'; }
+      else if(sample.conform===false){ status='nc'; symbol='✕'; }
+    }
     const time=new Date(t).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
-    const origin=sample?sample.origin||'PROD':'';
+    const origin=sample&&sample.origin==='C.Q.'?'C.Q.':'';
     html+=`<div class="tl-sample ${status}" style="left:${left}px" onclick='${sample?`showDetail(${JSON.stringify(JSON.stringify(sample))})`:''}'><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div>${origin?`<div style="font-size:10px; color:inherit; margin-top:2px;">${origin}</div>`:''}</div>`;
   }
   
