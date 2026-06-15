@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Saisie production — Presse</title>
+<style>
+  :root{
+    --bg:#11151f; --panel:#16213E; --panel2:#0F3460; --card:#1b2538;
+    --accent:#E94560; --accent-dark:#8B1A2E; --amber:#F4A261; --amber-dark:#7C4700;
+    --green:#2EC4B6; --yellow:#F2C94C; --silo:#F2C94C;
+    --text:#EAF0FA; --muted:#94A3B8; --border:#28324a;
+    --radius:14px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font-size:16px; -webkit-user-select:none; user-select:none; overscroll-behavior:none;}
+  body{padding-bottom:78px;}
+  .app{max-width:780px; margin:0 auto;}
+
+  /* Bandeau contexte production permanent */
+  #ctxBar{position:sticky; top:0; z-index:40; background:var(--panel2);
+    border-bottom:2px solid var(--border); padding:10px 14px;}
+  #ctxBar.stopped{border-bottom:4px solid var(--accent); box-shadow:inset 0 0 0 3px var(--accent);}
+  .ctx-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); gap:6px 14px;}
+  .ctx-item .l{font-size:10px; letter-spacing:.06em; color:var(--muted); text-transform:uppercase;}
+  .ctx-item .v{font-size:17px; font-weight:700; font-family:"SFMono-Regular",ui-monospace,Menlo,monospace;}
+  .ctx-empty{color:var(--muted); font-size:14px; padding:4px 0;}
+  #stopFlag{display:none; margin-top:8px; background:var(--accent); color:#fff;
+    border-radius:10px; padding:8px 12px; font-weight:700; text-align:center; font-size:15px;}
+  #ctxBar.stopped #stopFlag{display:block;}
+
+  /* Rappel échantillon */
+  #sampleAlert{display:none; background:var(--amber); color:#3a2400; margin:10px 14px 0;
+    border-radius:12px; padding:12px 14px; font-weight:700; align-items:center; gap:10px;}
+  #sampleAlert.show{display:flex;}
+  #sampleAlert button{margin-left:auto; background:#3a2400; color:#fff; border:none;
+    padding:8px 14px; border-radius:8px; font-weight:700; font-size:14px;}
+
+  .screen{display:none; padding:14px;}
+  .screen.active{display:block;}
+  .scr-title{font-size:20px; font-weight:700; margin:0 0 14px; display:flex; align-items:center; gap:10px;}
+  .scr-title .ico{font-size:24px;}
+
+  .card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+    padding:16px; margin-bottom:14px;}
+  .label{font-size:13px; color:var(--muted); display:block; margin-bottom:6px;}
+  input,select,textarea{width:100%; background:#0d1422; color:var(--text);
+    border:1px solid var(--border); border-radius:10px; padding:13px 12px; font-size:16px; font-family:inherit;}
+  input:focus,select,textarea:focus{outline:2px solid var(--green); outline-offset:0;}
+  textarea{min-height:70px; resize:vertical;}
+  .row{margin-bottom:13px;}
+  .two{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+
+  .btn{display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+    border:none; border-radius:12px; padding:16px; font-size:16px; font-weight:700;
+    cursor:pointer; font-family:inherit; transition:transform .08s;}
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:var(--panel2); color:#fff;}
+  .btn-accent{background:var(--accent); color:#fff;}
+  .btn-green{background:var(--green); color:#04302c;}
+  .btn-amber{background:var(--amber); color:#3a2400;}
+  .btn-ghost{background:transparent; color:var(--muted); border:1px solid var(--border);}
+  .btn-sm{padding:11px 14px; font-size:14px; border-radius:10px; width:auto;}
+
+  /* Boutons d'action accueil */
+  .home-actions{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:6px;}
+  .big-action{background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+    padding:22px 12px; text-align:center; cursor:pointer; transition:transform .08s;}
+  .big-action:active{transform:scale(.97);}
+  .big-action .bi{font-size:34px; display:block; margin-bottom:8px;}
+  .big-action .bt{font-size:15px; font-weight:700;}
+  .ba-rejet .bi{color:var(--accent);} .ba-arret .bi{color:var(--amber);}
+  .ba-silo .bi{color:var(--yellow);} .ba-ech .bi{color:var(--green);}
+  .ba-seq .bi{color:#7FB3FF;} .ba-hist .bi{color:var(--muted);}
+
+  /* Pavé numérique */
+  .numdisp{font-size:46px; font-weight:800; text-align:center; padding:14px;
+    font-family:ui-monospace,monospace; background:#0d1422; border-radius:12px; margin-bottom:12px;
+    border:1px solid var(--border); min-height:74px;}
+  .numpad{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  .numpad button{background:var(--panel); color:var(--text); border:1px solid var(--border);
+    border-radius:12px; padding:20px 0; font-size:26px; font-weight:700; cursor:pointer;}
+  .numpad button:active{background:var(--panel2);}
+  .numpad .wide{grid-column:span 1;}
+
+  /* Grilles de causes / types */
+  .opt-search{margin-bottom:10px;}
+  .opt-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; max-height:46vh; overflow-y:auto; padding-right:2px;}
+  .opt{background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:14px 12px; cursor:pointer; font-size:14px; font-weight:600; line-height:1.25;}
+  .opt:active{background:var(--panel2);}
+  .opt .code{display:block; font-size:11px; color:var(--muted); font-family:ui-monospace,monospace; margin-bottom:3px;}
+  .opt.sel{background:var(--accent); color:#fff; border-color:var(--accent);}
+
+  /* Chrono arrêt */
+  .timer{font-size:54px; font-weight:800; text-align:center; font-family:ui-monospace,monospace;
+    letter-spacing:.04em; padding:10px 0;}
+  .timer.run{color:var(--accent);}
+
+  /* Quantité +/- */
+  .qty-row{display:flex; align-items:center; justify-content:center; gap:16px;}
+  .qty-btn{width:64px; height:64px; border-radius:14px; background:var(--panel);
+    border:1px solid var(--border); font-size:34px; font-weight:700; color:var(--text); cursor:pointer;}
+  .qty-btn:active{background:var(--panel2);}
+  .qty-val{font-size:44px; font-weight:800; min-width:90px; text-align:center; font-family:ui-monospace,monospace;}
+
+  /* Historique - timeline */
+  .tl-wrap{overflow-x:auto; overflow-y:hidden; border:1px solid var(--border);
+    border-radius:12px; background:#0d1422; padding:0;}
+  .tl-inner{position:relative; height:160px; min-width:100%;}
+  .tl-axis{position:absolute; bottom:0; left:0; right:0; height:26px; border-top:1px solid var(--border);}
+  .tl-tick{position:absolute; bottom:0; height:26px; border-left:1px solid #243049;
+    font-size:10px; color:var(--muted); padding:2px 0 0 3px; white-space:nowrap;}
+  .tl-base{position:absolute; left:0; right:0; top:42px; height:46px; background:#13203a; border-radius:6px;}
+  .tl-stop{position:absolute; top:42px; height:46px; background:var(--accent); opacity:.85;
+    border-radius:4px; cursor:pointer;}
+  .tl-stop:active{opacity:1;}
+  .tl-rejet{position:absolute; top:30px; width:3px; background:var(--accent-dark); cursor:pointer;}
+  .tl-rejet .q{position:absolute; top:-16px; left:50%; transform:translateX(-50%);
+    font-size:11px; font-weight:800; color:var(--accent); white-space:nowrap;}
+  .tl-silo{position:absolute; top:20px; bottom:26px; width:0; border-left:3px dashed var(--silo); cursor:pointer;}
+  .tl-now{position:absolute; top:20px; bottom:26px; width:2px; background:var(--green);}
+  .tl-legend{display:flex; flex-wrap:wrap; gap:14px; margin:10px 2px; font-size:12px; color:var(--muted);}
+  .tl-legend span{display:flex; align-items:center; gap:6px;}
+  .lg-dot{width:14px; height:6px; border-radius:2px; display:inline-block;}
+
+  /* Résumé KPI */
+  .kpi-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .kpi{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:13px 14px;}
+  .kpi .kv{font-size:24px; font-weight:800;}
+  .kpi .kl{font-size:11px; color:var(--muted); margin-top:3px; text-transform:uppercase; letter-spacing:.04em;}
+
+  /* Liste entrées */
+  .entry{border-top:1px solid var(--border); padding:11px 0; display:flex; gap:10px; align-items:flex-start;}
+  .entry:first-child{border-top:none;}
+  .badge{font-size:11px; font-weight:800; padding:3px 9px; border-radius:8px; white-space:nowrap;}
+  .b-rejet{background:#3a1320; color:#ff7d97;}
+  .b-arret{background:#3a2600; color:#ffc170;}
+  .b-silo{background:#3a3300; color:#f7df7a;}
+  .b-ech{background:#0c322d; color:#6fe3d3;}
+  .b-ech.nc{background:#3a1320; color:#ff7d97;}
+  .entry .em{font-size:12px; color:var(--muted); margin-top:3px;}
+  .entry .et{font-size:12px; color:var(--muted); margin-left:auto; white-space:nowrap;}
+
+  /* Onglets bas */
+  #tabbar{position:fixed; bottom:0; left:0; right:0; background:var(--panel2);
+    border-top:1px solid var(--border); display:flex; z-index:50; max-width:780px; margin:0 auto;}
+  #tabbar button{flex:1; background:none; border:none; color:var(--muted); padding:8px 2px 9px;
+    font-size:10px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px;}
+  #tabbar button .ti{font-size:21px;}
+  #tabbar button.on{color:#fff;}
+
+  /* Scan zone */
+  .scan-box{border:2px dashed var(--border); border-radius:12px; padding:14px; text-align:center; margin-bottom:12px;}
+  #qrReader{width:100%; border-radius:12px; overflow:hidden; margin-top:10px;}
+
+  /* Modal détail */
+  .modal-bg{position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:80; display:none;
+    align-items:flex-end; justify-content:center;}
+  .modal-bg.show{display:flex;}
+  .modal{background:var(--card); border:1px solid var(--border); border-radius:18px 18px 0 0;
+    width:100%; max-width:780px; padding:20px; max-height:80vh; overflow-y:auto;}
+  .modal h3{margin:0 0 14px; font-size:18px;}
+  .dl{display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--border); font-size:15px;}
+  .dl .k{color:var(--muted);}
+  .dl .v{font-weight:700;}
+
+  /* Toast */
+  #toast{position:fixed; bottom:92px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--green); color:#04302c; padding:13px 26px; border-radius:26px; font-weight:800;
+    font-size:15px; z-index:90; opacity:0; transition:.25s; pointer-events:none; white-space:nowrap; max-width:90%;}
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  #toast.err{background:var(--accent); color:#fff;}
+
+  .chip{display:inline-block; padding:8px 16px; border-radius:20px; border:1px solid var(--border);
+    background:var(--panel); font-size:14px; cursor:pointer; margin:0 8px 8px 0; font-weight:600;}
+  .chip.on{background:var(--panel2); color:#fff; border-color:var(--green);}
+  .seclabel{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; margin:16px 0 8px;}
+  .list-item{display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-top:1px solid var(--border);}
+  .list-item:first-child{border-top:none;}
+  .del{background:none; border:none; color:var(--accent); cursor:pointer; font-size:14px; font-weight:700;}
+  .hint{font-size:12px; color:var(--muted); line-height:1.5;}
+  a{color:#7FB3FF;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Bandeau contexte permanent -->
+  <div id="ctxBar">
+    <div id="ctxContent" class="ctx-empty">Aucune production active — configurez dans « Paramètres »</div>
+    <div id="stopFlag">⏸ PRESSE ARRÊTÉE — chrono en cours</div>
+  </div>
+
+  <!-- Rappel échantillon -->
+  <div id="sampleAlert">
+    <span id="sampleAlertText">Échantillon horaire requis</span>
+    <button onclick="go('ech')">Saisir</button>
+  </div>
+
+  <!-- ACCUEIL -->
+  <div class="screen active" id="s-accueil">
+    <h2 class="scr-title"><span class="ico">⚙️</span> Saisie production</h2>
+    <div class="card" style="padding:12px 14px;">
+      <span class="label">Opérateur</span>
+      <select id="selOperateur" onchange="setOperateur()"><option value="">— Choisir —</option></select>
+    </div>
+    <div class="home-actions">
+      <div class="big-action ba-rejet" onclick="startRejet()"><span class="bi">▣</span><span class="bt">Ajouter un rejet</span></div>
+      <div class="big-action ba-arret" id="arretTile" onclick="toggleArretFromHome()"><span class="bi">⏸</span><span class="bt">Démarrer un arrêt</span></div>
+      <div class="big-action ba-seq" onclick="addSequence()"><span class="bi">＋</span><span class="bt">Séquence complétée</span></div>
+      <div class="big-action ba-ech" onclick="go('ech')"><span class="bi">⚗</span><span class="bt">Échantillon</span></div>
+      <div class="big-action ba-silo" onclick="go('trace')"><span class="bi">⇄</span><span class="bt">Changement silo</span></div>
+      <div class="big-action ba-hist" onclick="go('hist')"><span class="bi">▤</span><span class="bt">Historique</span></div>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div><div class="kl" style="font-size:11px; color:var(--muted);">Séquences complétées</div>
+        <div style="font-size:30px; font-weight:800;" id="seqCount">0</div></div>
+        <button class="btn btn-ghost btn-sm" onclick="addSequence()">+1 séquence</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- REJETS -->
+  <div class="screen" id="s-rejet">
+    <h2 class="scr-title"><span class="ico" style="color:var(--accent)">▣</span> Ajouter un rejet</h2>
+    <!-- étape 1 : quantité -->
+    <div id="rejetStep1">
+      <div class="card">
+        <span class="label">Quantité rejetée</span>
+        <div class="numdisp" id="numDisp">0</div>
+        <div class="numpad">
+          <button onclick="numKey('7')">7</button><button onclick="numKey('8')">8</button><button onclick="numKey('9')">9</button>
+          <button onclick="numKey('4')">4</button><button onclick="numKey('5')">5</button><button onclick="numKey('6')">6</button>
+          <button onclick="numKey('1')">1</button><button onclick="numKey('2')">2</button><button onclick="numKey('3')">3</button>
+          <button onclick="numClear()">C</button><button onclick="numKey('0')">0</button><button onclick="numBack()">⌫</button>
+        </div>
+      </div>
+      <button class="btn btn-accent" onclick="rejetToCause()">Valider la quantité →</button>
+      <button class="btn btn-ghost" style="margin-top:10px;" onclick="go('accueil')">Annuler</button>
+    </div>
+    <!-- étape 2 : cause -->
+    <div id="rejetStep2" style="display:none;">
+      <div class="card">
+        <span class="label">Quantité : <b id="rejetQtyEcho" style="color:var(--accent); font-size:18px;">0</b> — choisir la cause</span>
+        <input class="opt-search" id="rejetSearch" placeholder="Rechercher une cause…" oninput="renderCauses()">
+        <div class="opt-grid" id="causeGrid"></div>
+        <div class="row" style="margin-top:12px;">
+          <span class="label">Commentaire (optionnel)</span>
+          <textarea id="rejetComment" placeholder="Détails…"></textarea>
+        </div>
+      </div>
+      <button class="btn btn-accent" onclick="saveRejet()">✓ Enregistrer le rejet</button>
+      <button class="btn btn-ghost" style="margin-top:10px;" onclick="rejetBackToQty()">← Modifier la quantité</button>
+    </div>
+  </div>
+
+  <!-- ARRETS -->
+  <div class="screen" id="s-arret">
+    <h2 class="scr-title"><span class="ico" style="color:var(--amber)">⏸</span> Arrêt de production</h2>
+    <div class="card">
+      <div class="timer" id="arretTimer">00:00:00</div>
+      <div style="text-align:center; color:var(--muted); font-size:13px; margin-bottom:16px;" id="arretStatus">Appuyez pour démarrer l'arrêt</div>
+      <button class="btn btn-accent" id="arretMainBtn" onclick="toggleArret()">⏸ Démarrer l'arrêt</button>
+    </div>
+    <!-- choix du type : visible seulement après reprise -->
+    <div id="arretTypeBlock" style="display:none;">
+      <div class="card">
+        <span class="label">Durée enregistrée : <b id="arretDureeEcho" style="color:var(--amber); font-size:18px;">—</b> — choisir le type d'arrêt</span>
+        <input class="opt-search" id="arretSearch" placeholder="Rechercher un type…" oninput="renderStopTypes()">
+        <div class="opt-grid" id="stopGrid"></div>
+        <div class="row" style="margin-top:12px;">
+          <span class="label">Commentaire (optionnel)</span>
+          <textarea id="arretComment" placeholder="Détails…"></textarea>
+        </div>
+      </div>
+      <button class="btn btn-amber" onclick="saveArret()">✓ Enregistrer l'arrêt</button>
+    </div>
+  </div>
+
+  <!-- HISTORIQUE -->
+  <div class="screen" id="s-hist">
+    <h2 class="scr-title"><span class="ico">▤</span> Historique</h2>
+    <div class="tl-legend">
+      <span><i class="lg-dot" style="background:var(--accent)"></i> Arrêt</span>
+      <span><i class="lg-dot" style="background:var(--accent-dark)"></i> Rejet</span>
+      <span><i class="lg-dot" style="background:var(--silo)"></i> Silo</span>
+      <span><i class="lg-dot" style="background:var(--green)"></i> Maintenant</span>
+    </div>
+    <div class="tl-wrap"><div class="tl-inner" id="timeline"></div></div>
+    <div class="hint" style="margin:8px 2px 16px;">Touchez un élément de la bande pour voir le détail.</div>
+
+    <div class="seclabel">Résumé de production</div>
+    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <div class="seclabel">Journal des entrées</div>
+    <div class="card" id="entryList"></div>
+  </div>
+
+  <!-- TRACABILITE -->
+  <div class="screen" id="s-trace">
+    <h2 class="scr-title"><span class="ico" style="color:var(--yellow)">⇄</span> Traçabilité</h2>
+    <div class="card">
+      <span class="label">Silo actuel : <b id="siloEcho" style="color:var(--yellow);">—</b></span>
+      <div class="row"><span class="label">Nouveau numéro de silo</span>
+        <input id="siloInput" inputmode="numeric" placeholder="ex: 4"></div>
+      <button class="btn btn-amber" onclick="saveSilo()">✓ Enregistrer le changement</button>
+    </div>
+    <div class="seclabel">Changements récents</div>
+    <div class="card" id="siloList"></div>
+  </div>
+
+  <!-- ECHANTILLONS -->
+  <div class="screen" id="s-ech">
+    <h2 class="scr-title"><span class="ico" style="color:var(--green)">⚗</span> Échantillon qualité</h2>
+    <div class="card">
+      <div class="row"><span class="label">Poids (grammes)</span>
+        <input id="echPoids" inputmode="decimal" placeholder="ex: 124.5"></div>
+      <div class="row">
+        <span class="label">Conformité</span>
+        <div>
+          <span class="chip" id="chipC" onclick="setConform(true)">✓ Conforme</span>
+          <span class="chip" id="chipNC" onclick="setConform(false)">✗ Non conforme</span>
+        </div>
+      </div>
+      <div id="critBlock"></div>
+      <div class="row"><span class="label">Commentaire / observation</span>
+        <textarea id="echComment" placeholder="Apparence, couleur, bavures…"></textarea></div>
+      <button class="btn btn-green" onclick="saveEch()">✓ Enregistrer l'échantillon</button>
+    </div>
+    <div class="seclabel">Échantillons du jour</div>
+    <div class="card" id="echList"></div>
+  </div>
+
+  <!-- PARAMETRES -->
+  <div class="screen" id="s-param">
+    <h2 class="scr-title"><span class="ico">⚙</span> Paramètres</h2>
+
+    <div class="seclabel">Identification du lot / BT</div>
+    <div class="card">
+      <div class="scan-box">
+        <div style="font-weight:700; margin-bottom:6px;">Scanner ou saisir le code QR</div>
+        <input id="scanInput" placeholder="Focus ici puis scanner avec la douchette…" onkeydown="if(event.key==='Enter'){parseScan(this.value); this.value='';}">
+        <div class="hint" style="margin-top:8px;">Format recommandé du QR :<br><code>PIECE=21-0410;BT=PT26-04929;PRESSE=309-P;QTE=46;BOX=9/23</code></div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:10px; display:inline-flex;" onclick="toggleCamera()" id="camBtn">📷 Scanner par caméra</button>
+        <div id="qrReader"></div>
+        <div class="hint" id="camHint" style="margin-top:6px;"></div>
+      </div>
+      <div class="two">
+        <div class="row"><span class="label">Pièce</span><input id="pPiece" placeholder="21-0410"></div>
+        <div class="row"><span class="label">BT production</span><input id="pBT" placeholder="PT26-04929"></div>
+      </div>
+      <div class="two">
+        <div class="row"><span class="label">Presse</span><input id="pPresse" placeholder="309-P"></div>
+        <div class="row"><span class="label">Qté / boîte</span><input id="pQty" inputmode="numeric" placeholder="46"></div>
+      </div>
+      <div class="two">
+        <div class="row"><span class="label">N° séquence / boîte</span><input id="pSeq" placeholder="9/23"></div>
+        <div class="row"><span class="label">Silo de départ</span><input id="pSilo" inputmode="numeric" placeholder="3"></div>
+      </div>
+      <button class="btn btn-primary" onclick="saveProduction()">✓ Démarrer / mettre à jour la production</button>
+      <button class="btn btn-ghost" style="margin-top:10px;" onclick="endProduction()">Terminer la production en cours</button>
+    </div>
+
+    <div class="seclabel">Opérateurs</div>
+    <div class="card">
+      <div class="row"><div style="display:flex; gap:8px;">
+        <input id="newOp" placeholder="Nom de l'opérateur" style="flex:1;">
+        <button class="btn btn-ghost btn-sm" onclick="addOp()">Ajouter</button></div></div>
+      <div id="opList"></div>
+    </div>
+
+    <div class="seclabel">Causes de rejet (élaguez à vos 10-15 principales)</div>
+    <div class="card">
+      <div class="row"><div style="display:flex; gap:8px;">
+        <input id="newCause" placeholder="Nouvelle cause" style="flex:1;">
+        <button class="btn btn-ghost btn-sm" onclick="addCause()">Ajouter</button></div></div>
+      <div id="causeList" style="max-height:240px; overflow-y:auto;"></div>
+    </div>
+
+    <div class="seclabel">Types d'arrêt</div>
+    <div class="card">
+      <div class="row"><div style="display:flex; gap:8px;">
+        <input id="newStopCode" placeholder="Code" style="width:90px;">
+        <input id="newStopDesc" placeholder="Description" style="flex:1;">
+        <button class="btn btn-ghost btn-sm" onclick="addStop()">Ajouter</button></div></div>
+      <div id="stopList" style="max-height:240px; overflow-y:auto;"></div>
+    </div>
+
+    <div class="seclabel">Critères qualité (échantillons)</div>
+    <div class="card">
+      <div class="row"><div style="display:flex; gap:8px;">
+        <input id="newCrit" placeholder="ex: Apparence conforme" style="flex:1;">
+        <button class="btn btn-ghost btn-sm" onclick="addCrit()">Ajouter</button></div></div>
+      <div id="critList"></div>
+      <div class="row" style="margin-top:12px;"><span class="label">Rappel échantillon toutes les (minutes)</span>
+        <input id="reminderMin" inputmode="numeric" onchange="setReminder()"></div>
+    </div>
+
+    <div class="seclabel">Synchronisation & export</div>
+    <div class="card">
+      <div class="row"><span class="label">URL webhook Google Apps Script</span>
+        <input id="gsUrl" type="url" placeholder="https://script.google.com/macros/s/..." onchange="setGsUrl()"></div>
+      <button class="btn btn-ghost" onclick="exportCSV()">⬇ Télécharger CSV</button>
+      <button class="btn btn-ghost" style="margin-top:10px;" onclick="syncSheets()">☁ Envoyer tout vers Google Sheets</button>
+      <button class="btn btn-ghost btn-sm" style="margin-top:10px; display:inline-flex;" onclick="copyAppsScript()">Copier le code Apps Script</button>
+      <div class="hint" style="margin-top:10px;">Sheets → Extensions → Apps Script → coller le code → Déployer comme application web (accès : tout le monde) → coller l'URL ci-dessus.</div>
+    </div>
+
+    <div class="seclabel">Données</div>
+    <div class="card">
+      <button class="btn btn-ghost" onclick="clearToday()" style="color:var(--accent);">Effacer les entrées du jour</button>
+      <button class="btn btn-ghost" style="margin-top:10px; color:var(--accent);" onclick="clearAll()">Tout réinitialiser</button>
+    </div>
+  </div>
+
+  <!-- Onglets -->
+  <div id="tabbar">
+    <button data-s="accueil" class="on" onclick="go('accueil')"><span class="ti">⌂</span>Accueil</button>
+    <button data-s="rejet" onclick="startRejet()"><span class="ti">▣</span>Rejets</button>
+    <button data-s="arret" onclick="go('arret')"><span class="ti">⏸</span>Arrêts</button>
+    <button data-s="hist" onclick="go('hist')"><span class="ti">▤</span>Historique</button>
+    <button data-s="trace" onclick="go('trace')"><span class="ti">⇄</span>Traçabilité</button>
+    <button data-s="ech" onclick="go('ech')"><span class="ti">⚗</span>Échant.</button>
+    <button data-s="param" onclick="go('param')"><span class="ti">⚙</span>Param.</button>
+  </div>
+</div>
+
+<!-- Modal détail -->
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
+  <div class="modal"><h3 id="modalTitle">Détail</h3><div id="modalBody"></div>
+    <button class="btn btn-ghost" style="margin-top:14px;" onclick="closeModal()">Fermer</button></div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+/* ============================================================
+   ÉTAT & PERSISTANCE
+   ============================================================ */
+const SEED_CAUSES = ["Problème dimensionnel","Manque de vapeur","Mauvaise fusion","Mauvaise densité","Mauvais remplissage","Test Divers","Matière première contaminée","Problème d'insert au moulage","Modification Moule","Manque d'air","Ligne vapeur","Pièce étirée","Crotte et motton","Produit désuet","Erreur de programme","Equerrage","Piece en trop","Modification client","Autres divers","Problème outillage","Excès injecteur","Endommagé lors de l'éjection","Test destructif","Pièce croche","Mauvais centrage","Mauvaise manipulation employé","Ajustement départ production (setup)","Pièce référence","Éjection (knock-out)","Éjection Barrure","Poids léger","Poids lourd","Fournisseur interne","Fournisseur matière et composante","Mauvais ajustement vitesse et/ou chaleur","Assemblage - collé à l'envers","Bloc humide","Machine défectueuse","Erreur sur la fiche technique","Pièce tombée debout","Knock-out enfoncé","Coins brisés","Broche brisée en cours de production","Imprimante","Pièce cassée"];
+const SEED_STOPS = [["AJU","Ajustement"],["AJU-GRA","Ajustement grattage"],["GPO","Gestion personnel opérateur"],["MOU-EJE","Arrêt moule éjecteur"],["AO","Arrêt opérateur"],["MOU-INJ","Arrêt moule injecteur"],["AET","Arrêt équipe technique"],["MEC","Arrêt mécanique"],["AMP","Arrêt majeur production"],["MOU","Arrêt moule"],["PRO","Arrêt production"],["MMI","Arrêt manque matière interne"],["AJU-TRE","Arrêt ajustement trémie"],["AA","Arrêt autorisé"],["NC","Non-conforme"],["MPO","Manque personnel opérateur"],["PAU-PT","Pause et lunch PT"]];
+
+let state = {
+  operateurs: [],
+  causes: SEED_CAUSES.map((d,i)=>({code:i+1, desc:d})),
+  stops: SEED_STOPS.map(s=>({code:s[0], desc:s[1]})),
+  criteria: ["Apparence conforme","Couleur conforme","Bavures acceptables"],
+  reminderMin: 60,
+  gsUrl: "",
+  production: null,        // {piece,bt,presse,operateur,qtyPerBox,sequence,silo,startTime}
+  activeStop: null,        // {startTime}
+  sequences: 0,
+  lastSampleTime: null,
+  entries: []              // journal unifié
+};
+
+function load(){ try{ const s=localStorage.getItem('prodApp_v2'); if(s) state=Object.assign(state,JSON.parse(s)); }catch(e){} }
+function save(){ try{ localStorage.setItem('prodApp_v2', JSON.stringify(state)); }catch(e){} }
+const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+
+/* ============================================================
+   NAVIGATION
+   ============================================================ */
+function go(s){
+  document.querySelectorAll('.screen').forEach(e=>e.classList.remove('active'));
+  const el=document.getElementById('s-'+s); if(el) el.classList.add('active');
+  document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('on', b.dataset.s===s));
+  if(s==='accueil') renderAccueil();
+  if(s==='hist') renderHist();
+  if(s==='trace') renderTrace();
+  if(s==='ech') renderEch();
+  if(s==='param') renderParam();
+  if(s==='arret') renderArretScreen();
+  window.scrollTo(0,0);
+}
+
+/* ============================================================
+   CONTEXTE PRODUCTION (bandeau permanent)
+   ============================================================ */
+function renderCtx(){
+  const bar=document.getElementById('ctxBar'), c=document.getElementById('ctxContent');
+  bar.classList.toggle('stopped', !!state.activeStop);
+  const p=state.production;
+  if(!p){ c.className='ctx-empty'; c.textContent='Aucune production active — configurez dans « Paramètres »'; return; }
+  c.className='ctx-grid';
+  const items=[['Pièce',p.piece],['BT',p.bt],['Presse',p.presse],['Séquence',p.sequence],['Qté/boîte',p.qtyPerBox],['Silo',p.silo]];
+  c.innerHTML=items.filter(i=>i[1]).map(i=>`<div class="ctx-item"><div class="l">${i[0]}</div><div class="v">${i[1]}</div></div>`).join('');
+}
+
+function renderAccueil(){
+  const sel=document.getElementById('selOperateur'), cur=state.production?.operateur||'';
+  sel.innerHTML='<option value="">— Choisir —</option>'+state.operateurs.map(o=>`<option ${o===cur?'selected':''}>${o}</option>`).join('');
+  document.getElementById('seqCount').textContent=state.sequences;
+  const tile=document.getElementById('arretTile');
+  tile.querySelector('.bt').textContent = state.activeStop ? 'Reprendre (arrêt en cours)' : 'Démarrer un arrêt';
+  tile.querySelector('.bi').textContent = state.activeStop ? '▶' : '⏸';
+}
+function setOperateur(){ if(!state.production) state.production={piece:'',bt:'',presse:'',qtyPerBox:'',sequence:'',silo:'',startTime:new Date().toISOString()};
+  state.production.operateur=document.getElementById('selOperateur').value; save(); renderCtx(); }
+
+/* ============================================================
+   PARAMÈTRES PRODUCTION + SCAN QR
+   ============================================================ */
+function saveProduction(){
+  const p={
+    piece:val('pPiece'), bt:val('pBT'), presse:val('pPresse'),
+    qtyPerBox:val('pQty'), sequence:val('pSeq'), silo:val('pSilo'),
+    operateur: state.production?.operateur||'',
+    startTime: state.production?.startTime||new Date().toISOString()
+  };
+  state.production=p; save(); renderCtx(); toast('Production enregistrée ✓'); go('accueil');
+}
+function endProduction(){
+  if(!confirm('Terminer la production en cours ? Le contexte sera effacé (les entrées restent dans l\'historique).')) return;
+  state.production=null; state.sequences=0; state.activeStop=null; save(); renderCtx(); toast('Production terminée');
+}
+function val(id){ return document.getElementById(id).value.trim(); }
+
+function parseScan(raw){
+  if(!raw) return; let d={};
+  raw=raw.trim();
+  try{ const j=JSON.parse(raw); d=j; }catch(e){
+    if(raw.includes('=')){ raw.split(/[;\n|]/).forEach(pair=>{const [k,v]=pair.split('='); if(k&&v) d[k.trim().toUpperCase()]=v.trim();}); }
+    else { const parts=raw.split(/[|;,]/); d={PIECE:parts[0],BT:parts[1],PRESSE:parts[2],QTE:parts[3],BOX:parts[4]}; }
+  }
+  const set=(id,...keys)=>{ for(const k of keys){ const v=d[k]||d[k.toUpperCase()]; if(v){document.getElementById(id).value=v; return;} } };
+  set('pPiece','PIECE','PIÈCE','PART'); set('pBT','BT'); set('pPresse','PRESSE','PRESS');
+  set('pQty','QTE','QTY','QUANTITE'); set('pSeq','BOX','BOITE','SEQ','SEQUENCE'); set('pSilo','SILO');
+  toast('Code lu — vérifiez les champs ✓');
+}
+
+let qrScanner=null, camOn=false;
+function toggleCamera(){
+  const hint=document.getElementById('camHint');
+  if(typeof Html5Qrcode==='undefined'){ hint.textContent='Librairie caméra non chargée (hors-ligne). Utilisez la douchette ou la saisie manuelle.'; return; }
+  if(camOn){ stopCamera(); return; }
+  if(!window.isSecureContext){ hint.textContent='⚠ La caméra exige HTTPS. En local (file://) elle est bloquée — utilisez une douchette QR (clavier) ou hébergez la page en HTTPS (ex. GitHub Pages).'; }
+  qrScanner=new Html5Qrcode("qrReader");
+  qrScanner.start({facingMode:"environment"},{fps:10,qrbox:200},
+    txt=>{ parseScan(txt); stopCamera(); },
+    ()=>{}).then(()=>{camOn=true; document.getElementById('camBtn').textContent='■ Arrêter la caméra';})
+    .catch(err=>{ hint.textContent='Caméra indisponible : '+err; });
+}
+function stopCamera(){ if(qrScanner){ qrScanner.stop().then(()=>qrScanner.clear()).catch(()=>{}); } camOn=false; document.getElementById('camBtn').textContent='📷 Scanner par caméra'; }
+
+/* ============================================================
+   REJETS
+   ============================================================ */
+let numBuf="0", causeSel=null;
+function startRejet(){ numBuf="0"; causeSel=null;
+  document.getElementById('rejetStep1').style.display='block';
+  document.getElementById('rejetStep2').style.display='none';
+  document.getElementById('numDisp').textContent='0';
+  document.getElementById('rejetComment').value='';
+  document.getElementById('rejetSearch').value='';
+  go('rejet'); }
+function numKey(d){ if(numBuf==="0") numBuf=d; else if(numBuf.length<6) numBuf+=d; document.getElementById('numDisp').textContent=numBuf; }
+function numBack(){ numBuf=numBuf.length>1?numBuf.slice(0,-1):"0"; document.getElementById('numDisp').textContent=numBuf; }
+function numClear(){ numBuf="0"; document.getElementById('numDisp').textContent="0"; }
+function rejetToCause(){
+  if(parseInt(numBuf)<=0){ toast('Entrez une quantité',true); return; }
+  document.getElementById('rejetQtyEcho').textContent=numBuf;
+  document.getElementById('rejetStep1').style.display='none';
+  document.getElementById('rejetStep2').style.display='block';
+  renderCauses();
+}
+function rejetBackToQty(){ document.getElementById('rejetStep1').style.display='block'; document.getElementById('rejetStep2').style.display='none'; }
+function renderCauses(){
+  const q=document.getElementById('rejetSearch').value.toLowerCase();
+  const g=document.getElementById('causeGrid');
+  g.innerHTML=state.causes.filter(c=>!q||c.desc.toLowerCase().includes(q)||String(c.code).includes(q))
+    .map(c=>`<div class="opt ${causeSel===c.code?'sel':''}" onclick="selCause(${c.code})"><span class="code">#${c.code}</span>${c.desc}</div>`).join('');
+}
+function selCause(code){ causeSel=code; renderCauses(); }
+function saveRejet(){
+  if(!causeSel){ toast('Choisissez une cause',true); return; }
+  const c=state.causes.find(x=>x.code===causeSel);
+  const e={id:uid(),type:'rejet',timestamp:new Date().toISOString(),qty:parseInt(numBuf),
+    causeCode:c.code,causeDesc:c.desc,comment:val('rejetComment'),...ctxSnap()};
+  state.entries.push(e); save(); pushSheets(e); toast('Rejet enregistré ✓'); go('accueil');
+}
+function ctxSnap(){ const p=state.production||{}; return {piece:p.piece||'',bt:p.bt||'',presse:p.presse||'',sequence:p.sequence||'',operateur:p.operateur||'',silo:p.silo||''}; }
+
+/* ============================================================
+   ARRÊTS (deux temps)
+   ============================================================ */
+let arretInt=null, stopSel=null;
+function toggleArretFromHome(){ go('arret'); if(!state.activeStop) toggleArret(); }
+function renderArretScreen(){
+  const block=document.getElementById('arretTypeBlock'); block.style.display='none'; stopSel=null;
+  document.getElementById('arretComment').value='';
+  document.getElementById('arretSearch').value='';
+  if(state.activeStop){ startTick(); setArretRunning(true); }
+  else { stopTick(); document.getElementById('arretTimer').textContent='00:00:00'; setArretRunning(false);
+    document.getElementById('arretStatus').textContent="Appuyez pour démarrer l'arrêt"; }
+}
+function setArretRunning(run){
+  const b=document.getElementById('arretMainBtn'), t=document.getElementById('arretTimer');
+  if(run){ b.textContent='▶ Reprendre la production'; b.className='btn btn-green'; t.classList.add('run');
+    document.getElementById('arretStatus').textContent='Arrêt en cours…'; }
+  else { b.textContent='⏸ Démarrer l\'arrêt'; b.className='btn btn-accent'; t.classList.remove('run'); }
+}
+function toggleArret(){
+  if(!state.activeStop){
+    state.activeStop={startTime:new Date().toISOString()}; save(); renderCtx();
+    startTick(); setArretRunning(true);
+  } else {
+    const end=new Date(), start=new Date(state.activeStop.startTime);
+    const sec=Math.round((end-start)/1000);
+    pendingStop={startTime:state.activeStop.startTime,endTime:end.toISOString(),durationSec:sec};
+    state.activeStop=null; save(); renderCtx(); stopTick(); setArretRunning(false);
+    document.getElementById('arretDureeEcho').textContent=fmtDur(sec);
+    document.getElementById('arretStatus').textContent='Sélectionnez le type d\'arrêt';
+    document.getElementById('arretTypeBlock').style.display='block';
+    renderStopTypes();
+  }
+}
+let pendingStop=null;
+function startTick(){ stopTick(); arretInt=setInterval(()=>{ const s=Math.round((Date.now()-new Date(state.activeStop.startTime))/1000); document.getElementById('arretTimer').textContent=fmtDur(s); },500); }
+function stopTick(){ if(arretInt) clearInterval(arretInt); arretInt=null; }
+function renderStopTypes(){
+  const q=document.getElementById('arretSearch').value.toLowerCase();
+  document.getElementById('stopGrid').innerHTML=state.stops.filter(s=>!q||s.desc.toLowerCase().includes(q)||s.code.toLowerCase().includes(q))
+    .map(s=>`<div class="opt ${stopSel===s.code?'sel':''}" onclick="selStop('${s.code}')"><span class="code">${s.code}</span>${s.desc}</div>`).join('');
+}
+function selStop(code){ stopSel=code; renderStopTypes(); }
+function saveArret(){
+  if(!stopSel){ toast('Choisissez un type d\'arrêt',true); return; }
+  const s=state.stops.find(x=>x.code===stopSel);
+  const e={id:uid(),type:'arret',timestamp:pendingStop.startTime,startTime:pendingStop.startTime,
+    endTime:pendingStop.endTime,durationSec:pendingStop.durationSec,
+    stopCode:s.code,stopDesc:s.desc,comment:val('arretComment'),...ctxSnap()};
+  state.entries.push(e); save(); pushSheets(e); pendingStop=null; toast('Arrêt enregistré ✓'); go('accueil');
+}
+function fmtDur(sec){ const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
+
+/* ============================================================
+   SÉQUENCES
+   ============================================================ */
+function addSequence(){ state.sequences++; save(); renderAccueil(); toast('Séquence +1 ✓'); }
+
+/* ============================================================
+   TRAÇABILITÉ / SILO
+   ============================================================ */
+function renderTrace(){
+  document.getElementById('siloEcho').textContent=state.production?.silo||'—';
+  const list=state.entries.filter(e=>e.type==='silo').slice().reverse();
+  document.getElementById('siloList').innerHTML = list.length? list.map(e=>entryRow(e)).join('') : '<div class="hint">Aucun changement enregistré.</div>';
+}
+function saveSilo(){
+  const n=val('siloInput'); if(!n){ toast('Entrez un numéro de silo',true); return; }
+  const prev=state.production?.silo||'';
+  const e={id:uid(),type:'silo',timestamp:new Date().toISOString(),silo:n,prevSilo:prev,...ctxSnap()};
+  e.silo=n;
+  state.entries.push(e);
+  if(state.production) state.production.silo=n;
+  save(); pushSheets(e); renderCtx(); renderTrace(); document.getElementById('siloInput').value=''; toast('Changement de silo enregistré ✓');
+}
+
+/* ============================================================
+   ÉCHANTILLONS
+   ============================================================ */
+let echConform=null, echCrit={};
+function renderEch(){
+  echConform=null; echCrit={};
+  document.getElementById('echPoids').value=''; document.getElementById('echComment').value='';
+  document.getElementById('chipC').classList.remove('on'); document.getElementById('chipNC').classList.remove('on');
+  document.getElementById('critBlock').innerHTML = state.criteria.length ? '<span class="label">Critères qualité</span>'+
+    state.criteria.map((c,i)=>`<span class="chip" id="crit${i}" onclick="toggleCrit(${i})">${c}</span>`).join('') : '';
+  const list=state.entries.filter(e=>e.type==='echantillon'&&isToday(e.timestamp)).slice().reverse();
+  document.getElementById('echList').innerHTML = list.length? list.map(e=>entryRow(e)).join('') : '<div class="hint">Aucun échantillon aujourd\'hui.</div>';
+}
+function setConform(v){ echConform=v;
+  document.getElementById('chipC').classList.toggle('on',v===true);
+  document.getElementById('chipNC').classList.toggle('on',v===false); }
+function toggleCrit(i){ echCrit[state.criteria[i]]=!echCrit[state.criteria[i]];
+  document.getElementById('crit'+i).classList.toggle('on',echCrit[state.criteria[i]]); }
+function saveEch(){
+  if(echConform===null){ toast('Indiquez conforme / non conforme',true); return; }
+  const e={id:uid(),type:'echantillon',timestamp:new Date().toISOString(),
+    poids:val('echPoids'),conform:echConform,criteres:echCrit,comment:val('echComment'),...ctxSnap()};
+  state.entries.push(e); state.lastSampleTime=e.timestamp; save(); pushSheets(e);
+  hideSampleAlert(); toast('Échantillon enregistré ✓'); go('accueil');
+}
+
+/* ============================================================
+   RAPPEL HORAIRE ÉCHANTILLON
+   ============================================================ */
+function checkSampleReminder(){
+  if(!state.production) return hideSampleAlert();
+  const last = state.lastSampleTime ? new Date(state.lastSampleTime) : new Date(state.production.startTime);
+  const mins=(Date.now()-last)/60000;
+  if(mins>=state.reminderMin){
+    document.getElementById('sampleAlertText').textContent=`Échantillon requis (dernier il y a ${Math.round(mins)} min)`;
+    document.getElementById('sampleAlert').classList.add('show');
+  } else hideSampleAlert();
+}
+function hideSampleAlert(){ document.getElementById('sampleAlert').classList.remove('show'); }
+
+/* ============================================================
+   HISTORIQUE — TIMELINE + KPI
+   ============================================================ */
+function renderHist(){ renderTimeline(); renderKPI(); renderEntryList(); }
+function renderTimeline(){
+  const tl=document.getElementById('timeline');
+  if(!state.production||!state.production.startTime){ tl.innerHTML='<div class="hint" style="padding:20px;">Aucune production active.</div>'; return; }
+  const start=new Date(state.production.startTime).getTime();
+  const now=Date.now();
+  const totalMin=Math.max(10,(now-start)/60000);
+  const PXMIN=Math.max(6, Math.min(14, 700/totalMin)); // adapte l'échelle
+  const W=Math.max(700, totalMin*PXMIN);
+  tl.style.width=W+'px';
+  const x=t=>((new Date(t).getTime()-start)/60000)*PXMIN;
+  let html='<div class="tl-base"></div>';
+  // arrêts
+  state.entries.filter(e=>e.type==='arret').forEach(e=>{
+    const left=x(e.startTime), w=Math.max(3,(e.durationSec/60)*PXMIN);
+    html+=`<div class="tl-stop" style="left:${left}px;width:${w}px" onclick='showDetail(${JSON.stringify(JSON.stringify(e))})'></div>`;
+  });
+  // rejets
+  state.entries.filter(e=>e.type==='rejet').forEach(e=>{
+    const left=x(e.timestamp);
+    html+=`<div class="tl-rejet" style="left:${left}px;height:58px" onclick='showDetail(${JSON.stringify(JSON.stringify(e))})'><span class="q">${e.qty}</span></div>`;
+  });
+  // silo
+  state.entries.filter(e=>e.type==='silo').forEach(e=>{
+    const left=x(e.timestamp);
+    html+=`<div class="tl-silo" style="left:${left}px" onclick='showDetail(${JSON.stringify(JSON.stringify(e))})'></div>`;
+  });
+  // maintenant
+  html+=`<div class="tl-now" style="left:${x(new Date().toISOString())}px"></div>`;
+  // axe horaire
+  html+='<div class="tl-axis"></div>';
+  const stepMin = totalMin>240?60: totalMin>60?30:15;
+  for(let m=0;m<=totalMin;m+=stepMin){
+    const d=new Date(start+m*60000);
+    html+=`<div class="tl-tick" style="left:${m*PXMIN}px">${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}</div>`;
+  }
+  tl.innerHTML=html;
+  document.querySelector('.tl-wrap').scrollLeft=W;
+}
+
+function renderKPI(){
+  const p=state.production; const g=document.getElementById('kpiGrid');
+  if(!p){ g.innerHTML='<div class="hint" style="padding:8px;">Aucune production active.</div>'; return; }
+  const qtyBox=parseFloat(p.qtyPerBox)||0;
+  const pieces = qtyBox? state.sequences*qtyBox : null;
+  const start=new Date(p.startTime).getTime();
+  const totalSec=Math.round((Date.now()-start)/1000);
+  const stopSec=state.entries.filter(e=>e.type==='arret').reduce((a,e)=>a+(e.durationSec||0),0);
+  const prodSec=Math.max(0,totalSec-stopSec);
+  const rejets=state.entries.filter(e=>e.type==='rejet').reduce((a,e)=>a+(e.qty||0),0);
+  const stopPct = totalSec? (stopSec/totalSec*100):0;
+  const rejRate = pieces? (rejets/pieces*100):null;
+  const cadence = (pieces&&prodSec>0)? (pieces/(prodSec/3600)):null;
+  const NA='<span style="color:var(--muted)">Non disponible</span>';
+  const cards=[
+    ['Séquences complétées', state.sequences],
+    ['Pièces produites', pieces!=null?pieces:NA],
+    ['Temps total', fmtDur(totalSec)],
+    ['Temps d\'arrêt', fmtDur(stopSec)],
+    ['% d\'arrêt', totalSec?stopPct.toFixed(1)+' %':NA],
+    ['Rejets totaux', rejets],
+    ['Taux de rejet', rejRate!=null?rejRate.toFixed(2)+' %':NA],
+    ['Cadence (p/h)', cadence!=null?Math.round(cadence):NA]
+  ];
+  g.innerHTML=cards.map(c=>`<div class="kpi"><div class="kv">${c[1]}</div><div class="kl">${c[0]}</div></div>`).join('');
+}
+
+function renderEntryList(){
+  const list=state.entries.filter(e=>isToday(e.timestamp)).slice().reverse();
+  document.getElementById('entryList').innerHTML = list.length? list.map(e=>entryRow(e)).join('') : '<div class="hint">Aucune entrée aujourd\'hui.</div>';
+}
+function entryRow(e){
+  const t=new Date(e.timestamp).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
+  let badge,main,meta;
+  if(e.type==='rejet'){ badge='<span class="badge b-rejet">Rejet</span>'; main=`${e.qty} pièce(s)`; meta=`#${e.causeCode} ${e.causeDesc}`; }
+  else if(e.type==='arret'){ badge='<span class="badge b-arret">Arrêt</span>'; main=fmtDur(e.durationSec); meta=`${e.stopCode} — ${e.stopDesc}`; }
+  else if(e.type==='silo'){ badge='<span class="badge b-silo">Silo</span>'; main=`Silo ${e.silo}`; meta=e.prevSilo?`Précédent : ${e.prevSilo}`:'Premier silo'; }
+  else { badge=`<span class="badge b-ech ${e.conform?'':'nc'}">Échant.</span>`; main=`${e.poids||'—'} g`; meta=e.conform?'Conforme':'Non conforme'; }
+  return `<div class="entry" onclick='showDetail(${JSON.stringify(JSON.stringify(e))})'>${badge}
+    <div><div style="font-weight:700">${main}</div><div class="em">${meta}</div></div><div class="et">${t}</div></div>`;
+}
+
+/* ============================================================
+   MODAL DÉTAIL
+   ============================================================ */
+function showDetail(json){
+  const e=typeof json==='string'?JSON.parse(json):json;
+  const body=document.getElementById('modalBody'); const title=document.getElementById('modalTitle');
+  const dl=(k,v)=>`<div class="dl"><span class="k">${k}</span><span class="v">${v||'—'}</span></div>`;
+  const t=ts=>new Date(ts).toLocaleString('fr-CA');
+  let h='';
+  if(e.type==='rejet'){ title.textContent='Détail — Rejet';
+    h=dl('Heure',t(e.timestamp))+dl('Quantité',e.qty)+dl('Cause',`#${e.causeCode} ${e.causeDesc}`)+dl('Commentaire',e.comment); }
+  else if(e.type==='arret'){ title.textContent='Détail — Arrêt';
+    h=dl('Début',t(e.startTime))+dl('Fin',t(e.endTime))+dl('Durée',fmtDur(e.durationSec))+dl('Type',`${e.stopCode} — ${e.stopDesc}`)+dl('Commentaire',e.comment); }
+  else if(e.type==='silo'){ title.textContent='Détail — Changement de silo';
+    h=dl('Heure',t(e.timestamp))+dl('Ancien silo',e.prevSilo)+dl('Nouveau silo',e.silo); }
+  else { title.textContent='Détail — Échantillon';
+    const crit=Object.entries(e.criteres||{}).map(([k,v])=>`${k}: ${v?'✓':'✗'}`).join('<br>');
+    h=dl('Heure',t(e.timestamp))+dl('Poids',(e.poids||'—')+' g')+dl('Conformité',e.conform?'Conforme':'Non conforme')+dl('Critères',crit)+dl('Commentaire',e.comment); }
+  h+=dl('Pièce / BT',[e.piece,e.bt].filter(Boolean).join(' / '))+dl('Presse',e.presse)+dl('Opérateur',e.operateur);
+  body.innerHTML=h; document.getElementById('modalBg').classList.add('show');
+}
+function closeModal(){ document.getElementById('modalBg').classList.remove('show'); }
+
+/* ============================================================
+   PARAMÈTRES — listes éditables
+   ============================================================ */
+function renderParam(){
+  if(state.production){ ['pPiece','pBT','pPresse','pQty','pSeq','pSilo'].forEach((id,i)=>{
+    document.getElementById(id).value=[state.production.piece,state.production.bt,state.production.presse,state.production.qtyPerBox,state.production.sequence,state.production.silo][i]||''; }); }
+  document.getElementById('reminderMin').value=state.reminderMin;
+  document.getElementById('gsUrl').value=state.gsUrl;
+  document.getElementById('opList').innerHTML=state.operateurs.map((o,i)=>li(o,`removeOp(${i})`)).join('')||hint('Aucun opérateur');
+  document.getElementById('causeList').innerHTML=state.causes.map((c,i)=>li(`#${c.code} ${c.desc}`,`removeCause(${i})`)).join('');
+  document.getElementById('stopList').innerHTML=state.stops.map((s,i)=>li(`${s.code} — ${s.desc}`,`removeStop(${i})`)).join('');
+  document.getElementById('critList').innerHTML=state.criteria.map((c,i)=>li(c,`removeCrit(${i})`)).join('')||hint('Aucun critère');
+  setTimeout(()=>document.getElementById('scanInput')?.focus(),100);
+}
+const li=(txt,fn)=>`<div class="list-item"><span style="font-size:14px">${txt}</span><button class="del" onclick="${fn}">Retirer</button></div>`;
+const hint=t=>`<div class="hint">${t}</div>`;
+function addOp(){ const v=val('newOp'); if(!v)return; state.operateurs.push(v); save(); document.getElementById('newOp').value=''; renderParam(); }
+function removeOp(i){ state.operateurs.splice(i,1); save(); renderParam(); }
+function addCause(){ const v=val('newCause'); if(!v)return; const max=Math.max(0,...state.causes.map(c=>+c.code||0)); state.causes.push({code:max+1,desc:v}); save(); document.getElementById('newCause').value=''; renderParam(); }
+function removeCause(i){ state.causes.splice(i,1); save(); renderParam(); }
+function addStop(){ const c=val('newStopCode'), d=val('newStopDesc'); if(!c||!d)return; state.stops.push({code:c,desc:d}); save(); document.getElementById('newStopCode').value=''; document.getElementById('newStopDesc').value=''; renderParam(); }
+function removeStop(i){ state.stops.splice(i,1); save(); renderParam(); }
+function addCrit(){ const v=val('newCrit'); if(!v)return; state.criteria.push(v); save(); document.getElementById('newCrit').value=''; renderParam(); }
+function removeCrit(i){ state.criteria.splice(i,1); save(); renderParam(); }
+function setReminder(){ state.reminderMin=parseInt(document.getElementById('reminderMin').value)||60; save(); }
+function setGsUrl(){ state.gsUrl=document.getElementById('gsUrl').value.trim(); save(); }
+
+/* ============================================================
+   EXPORT / SYNC
+   ============================================================ */
+function exportCSV(){
+  if(!state.entries.length){ toast('Aucune donnée',true); return; }
+  const H=['type','date','heure','piece','bt','presse','sequence','operateur','silo','quantite','cause_code','cause_desc','arret_debut','arret_fin','duree','duree_sec','type_arret_code','type_arret_desc','silo_num','poids_g','conforme','commentaire'];
+  const rows=state.entries.map(e=>{ const d=new Date(e.timestamp);
+    return [e.type,d.toLocaleDateString('fr-CA'),d.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'}),
+      e.piece,e.bt,e.presse,e.sequence,e.operateur,e.silo,
+      e.qty||'',e.causeCode||'',e.causeDesc||'',
+      e.startTime?new Date(e.startTime).toLocaleTimeString('fr-CA'):'',e.endTime?new Date(e.endTime).toLocaleTimeString('fr-CA'):'',
+      e.durationSec!=null?fmtDur(e.durationSec):'',e.durationSec||'',e.stopCode||'',e.stopDesc||'',
+      e.type==='silo'?e.silo:'',e.poids||'',e.conform===true?'Oui':e.conform===false?'Non':'',
+      (e.comment||'').replace(/[,;\n]/g,' ')].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',');
+  });
+  const csv=[H.join(','),...rows].join('\n');
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='production_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+  toast('CSV téléchargé ✓');
+}
+function pushSheets(entry){ if(!state.gsUrl) return;
+  fetch(state.gsUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries:[entry]})}).catch(()=>{}); }
+function syncSheets(){ if(!state.gsUrl){ toast('Configurez l\'URL Apps Script',true); return; }
+  if(!state.entries.length){ toast('Aucune donnée',true); return; }
+  fetch(state.gsUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries:state.entries})})
+    .then(()=>toast('Envoyé vers Sheets ✓')).catch(()=>toast('Erreur de connexion',true)); }
+function copyAppsScript(){
+  const code=`function doPost(e){
+  var ss=SpreadsheetApp.getActiveSpreadsheet();
+  var data=JSON.parse(e.postData.contents);
+  data.entries.forEach(function(en){
+    var name = en.type==='rejet'?'Rejets':en.type==='arret'?'Arrets':en.type==='silo'?'Silos':'Echantillons';
+    var sh=ss.getSheetByName(name)||ss.insertSheet(name);
+    if(sh.getLastRow()===0){
+      if(en.type==='rejet') sh.appendRow(['Horodatage','Piece','BT','Presse','Sequence','Operateur','Quantite','Code cause','Cause','Commentaire']);
+      else if(en.type==='arret') sh.appendRow(['Debut','Fin','Duree (s)','Code','Type arret','Piece','BT','Presse','Operateur','Commentaire']);
+      else if(en.type==='silo') sh.appendRow(['Horodatage','Nouveau silo','Ancien silo','Piece','BT','Presse','Operateur']);
+      else sh.appendRow(['Horodatage','Poids (g)','Conforme','Criteres','Piece','BT','Presse','Operateur','Commentaire']);
+    }
+    if(en.type==='rejet') sh.appendRow([en.timestamp,en.piece,en.bt,en.presse,en.sequence,en.operateur,en.qty,en.causeCode,en.causeDesc,en.comment]);
+    else if(en.type==='arret') sh.appendRow([en.startTime,en.endTime,en.durationSec,en.stopCode,en.stopDesc,en.piece,en.bt,en.presse,en.operateur,en.comment]);
+    else if(en.type==='silo') sh.appendRow([en.timestamp,en.silo,en.prevSilo,en.piece,en.bt,en.presse,en.operateur]);
+    else sh.appendRow([en.timestamp,en.poids,en.conform?'Oui':'Non',JSON.stringify(en.criteres||{}),en.piece,en.bt,en.presse,en.operateur,en.comment]);
+  });
+  return ContentService.createTextOutput('OK');
+}`;
+  navigator.clipboard.writeText(code).then(()=>toast('Code Apps Script copié ✓')).catch(()=>toast('Copie impossible',true));
+}
+
+/* ============================================================
+   NETTOYAGE
+   ============================================================ */
+function clearToday(){ if(!confirm('Effacer les entrées d\'aujourd\'hui ?'))return;
+  state.entries=state.entries.filter(e=>!isToday(e.timestamp)); save(); toast('Entrées du jour effacées'); }
+function clearAll(){ if(!confirm('Tout réinitialiser (entrées + production) ? Les listes de paramètres sont conservées.'))return;
+  state.entries=[]; state.production=null; state.activeStop=null; state.sequences=0; state.lastSampleTime=null; save(); renderCtx(); toast('Réinitialisé'); go('accueil'); }
+
+/* ============================================================
+   UTILITAIRES
+   ============================================================ */
+function isToday(ts){ return new Date(ts).toDateString()===new Date().toDateString(); }
+let toastT=null;
+function toast(msg,err){ const t=document.getElementById('toast'); t.textContent=msg; t.className=err?'show err':'show';
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200); }
+
+/* ============================================================
+   INIT
+   ============================================================ */
+load(); renderCtx(); renderAccueil();
+checkSampleReminder(); setInterval(checkSampleReminder,30000);
+if(state.activeStop) startTick();
+</script>
+</body>
+</html>
