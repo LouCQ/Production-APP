@@ -201,7 +201,7 @@
 <div class="app">
 
   <!-- Bandeau contexte permanent -->
-  <div id="ctxBar">
+  <div id="ctxBar" onclick="go('accueil')" style="cursor:pointer;">
     <div id="ctxContent" class="ctx-empty">Aucune production active — configurez dans « Paramètres »</div>
     <div id="stopFlag">⏸ PRESSE ARRÊTÉE — chrono en cours</div>
   </div>
@@ -345,6 +345,7 @@
       <div class="row"><span class="label">Commentaire / observation</span>
         <textarea id="echComment" placeholder="Apparence, couleur, bavures…"></textarea></div>
       <button class="btn btn-green btn-sticky" onclick="saveEch()">✓ Enregistrer l'échantillon</button>
+      <button class="btn btn-ghost btn-sticky" style="margin-top:10px; background:var(--card); margin-bottom:0;" id="echCancelBtn" style="display:none;" onclick="cancelEch()">← Annuler la saisie</button>
     </div>
     <div class="seclabel">Échantillons du jour</div>
     <div class="card" id="echList"></div>
@@ -380,49 +381,17 @@
       <button class="btn btn-ghost" style="margin-top:10px;" onclick="endProduction()">Terminer la production en cours</button>
     </div>
 
-    <div class="seclabel">Opérateurs</div>
+    <div class="seclabel">Rappel d'échantillon toutes les (minutes)</div>
     <div class="card">
-      <div class="row"><div style="display:flex; gap:8px;">
-        <input id="newOp" placeholder="Nom de l'opérateur" style="flex:1;">
-        <button class="btn btn-ghost btn-sm" onclick="addOp()">Ajouter</button></div></div>
-      <div id="opList"></div>
-    </div>
-
-    <div class="seclabel">Causes de rejet (élaguez à vos 10-15 principales)</div>
-    <div class="card">
-      <div class="row"><div style="display:flex; gap:8px;">
-        <input id="newCause" placeholder="Nouvelle cause" style="flex:1;">
-        <button class="btn btn-ghost btn-sm" onclick="addCause()">Ajouter</button></div></div>
-      <div id="causeList" style="max-height:240px; overflow-y:auto;"></div>
-    </div>
-
-    <div class="seclabel">Types d'arrêt</div>
-    <div class="card">
-      <div class="row"><div style="display:flex; gap:8px;">
-        <input id="newStopCode" placeholder="Code" style="width:90px;">
-        <input id="newStopDesc" placeholder="Description" style="flex:1;">
-        <button class="btn btn-ghost btn-sm" onclick="addStop()">Ajouter</button></div></div>
-      <div id="stopList" style="max-height:240px; overflow-y:auto;"></div>
-    </div>
-
-    <div class="seclabel">Critères qualité (échantillons)</div>
-    <div class="card">
-      <div class="row"><div style="display:flex; gap:8px;">
-        <input id="newCrit" placeholder="ex: Apparence conforme" style="flex:1;">
-        <button class="btn btn-ghost btn-sm" onclick="addCrit()">Ajouter</button></div></div>
-      <div id="critList"></div>
-      <div class="row" style="margin-top:12px;"><span class="label">Rappel échantillon toutes les (minutes)</span>
-        <input id="reminderMin" inputmode="numeric" onchange="setReminder()"></div>
-    </div>
-
-    <div class="seclabel">Synchronisation & export</div>
-    <div class="card">
-      <div class="row"><span class="label">URL webhook Google Apps Script</span>
-        <input id="gsUrl" type="url" placeholder="https://script.google.com/macros/s/..." onchange="setGsUrl()"></div>
-      <button class="btn btn-ghost" onclick="exportCSV()">⬇ Télécharger CSV</button>
-      <button class="btn btn-ghost" style="margin-top:10px;" onclick="syncSheets()">☁ Envoyer tout vers Google Sheets</button>
-      <button class="btn btn-ghost btn-sm" style="margin-top:10px; display:inline-flex;" onclick="copyAppsScript()">Copier le code Apps Script</button>
-      <div class="hint" style="margin-top:10px;">Sheets → Extensions → Apps Script → coller le code → Déployer comme application web (accès : tout le monde) → coller l'URL ci-dessus.</div>
+      <div class="row">
+        <input id="reminderMin" inputmode="numeric" onchange="setReminder()" placeholder="60">
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="samplePerSequence" onchange="setSamplePerSequence()">
+          <span>Demander un échantillon à chaque séquence complétée</span>
+        </label>
+      </div>
     </div>
 
     <div class="seclabel">Données</div>
@@ -466,6 +435,7 @@ let state = {
   stops: SEED_STOPS.map(s=>({code:s[0], desc:s[1]})),
   criteria: ["Apparence conforme","Couleur conforme","Bavures acceptables"],
   reminderMin: 60,
+  samplePerSequence: false,
   gsUrl: "",
   production: null,        // {piece,bt,presse,operateur,qtyPerBox,sequence,silo,startTime}
   activeStop: null,        // {startTime}
@@ -473,6 +443,8 @@ let state = {
   lastSampleTime: null,
   entries: []              // journal unifié
 };
+
+let pendingSequence=false;  // Indique qu'une séquence est en attente de confirmation d'échantillon
 
 function load(){ try{ const s=localStorage.getItem('prodApp_v2'); if(s) state=Object.assign(state,JSON.parse(s)); }catch(e){} }
 function save(){ try{ localStorage.setItem('prodApp_v2', JSON.stringify(state)); }catch(e){} }
@@ -748,20 +720,43 @@ function fmtDur(sec){ const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s
 /* ============================================================
    SÉQUENCES
    ============================================================ */
+function setSamplePerSequence(){ state.samplePerSequence=document.getElementById('samplePerSequence').checked; save(); }
 function addSequence(){ 
-  state.sequences++; 
-  // Incrémente aussi le champ de séquence si format "X/Y"
-  if(state.production?.sequence){
-    const parts=state.production.sequence.split('/');
-    if(parts.length===2){
-      const current=parseInt(parts[0])||0;
-      state.production.sequence=(current+1)+'/'+parts[1];
+  if(!state.samplePerSequence){
+    // Comportement normal : incrémenter directement
+    state.sequences++; 
+    if(state.production?.sequence){
+      const parts=state.production.sequence.split('/');
+      if(parts.length===2){
+        const current=parseInt(parts[0])||0;
+        state.production.sequence=(current+1)+'/'+parts[1];
+      }
     }
+    // Ajouter l'événement dans l'historique
+    const e={id:uid(),type:'sequence',timestamp:new Date().toISOString(),...ctxSnap()};
+    state.entries.push(e);
+    save(); 
+    renderAccueil(); 
+    renderCtx();
+    toast('Séquence +1 ✓'); 
+  } else {
+    // Avec échantillon obligatoire : afficher le formulaire
+    pendingSequence=true;
+    echConform=null; echCrit={}; echType='prod';
+    document.getElementById('echPoids').value=''; 
+    document.getElementById('echComment').value='';
+    document.getElementById('chipC').classList.remove('on'); 
+    document.getElementById('chipNC').classList.remove('on');
+    document.querySelector('input[name="echType"][value="prod"]').checked=true;
+    
+    // Modifier le bouton pour valider la séquence + échantillon
+    const saveBtn=document.querySelector('#s-ech .btn-green');
+    saveBtn.textContent='✓ Confirmer séquence + échantillon';
+    saveBtn.id='seqEchButton';
+    
+    go('ech');
+    toast('Remplissez l\'échantillon pour cette séquence');
   }
-  save(); 
-  renderAccueil(); 
-  renderCtx();
-  toast('Séquence +1 ✓'); 
 }
 
 /* ============================================================
@@ -787,6 +782,13 @@ function saveSilo(){
    ============================================================ */
 let echConform=null, echCrit={}, echType='prod';
 function setEchType(t){ echType=t; }
+function cancelEch(){
+  if(pendingSequence){
+    pendingSequence=false;
+    toast('Saisie d\'échantillon annulée');
+  }
+  go('accueil');
+}
 function renderEch(){
   echConform=null; echCrit={}; echType='prod';
   document.getElementById('echPoids').value=''; document.getElementById('echComment').value='';
@@ -796,6 +798,9 @@ function renderEch(){
     state.criteria.map((c,i)=>`<span class="chip" id="crit${i}" onclick="toggleCrit(${i})">${c}</span>`).join('') : '';
   const list=state.entries.filter(e=>(e.type==='echantillon')&&isToday(e.timestamp)).slice().reverse();
   document.getElementById('echList').innerHTML = list.length? list.map(e=>entryRow(e)).join('') : '<div class="hint">Aucun échantillon aujourd\'hui.</div>';
+  
+  // Afficher le bouton d'annulation si on est en mode séquence obligatoire
+  document.getElementById('echCancelBtn').style.display=pendingSequence?'block':'none';
 }
 function setConform(v){ echConform=v;
   document.getElementById('chipC').classList.toggle('on',v===true);
@@ -807,7 +812,28 @@ function saveEch(){
   const e={id:uid(),type:'echantillon',timestamp:new Date().toISOString(),
     poids:val('echPoids'),conform:echConform,criteres:echCrit,comment:val('echComment'),origin:echType==='cq'?'C.Q.':'PROD',...ctxSnap()};
   state.entries.push(e); state.lastSampleTime=e.timestamp; save(); pushSheets(e);
-  hideSampleAlert(); toast('Échantillon enregistré ✓'); go('accueil');
+  
+  // Si c'est un échantillon obligatoire pour une séquence
+  if(pendingSequence){
+    state.sequences++; 
+    if(state.production?.sequence){
+      const parts=state.production.sequence.split('/');
+      if(parts.length===2){
+        const current=parseInt(parts[0])||0;
+        state.production.sequence=(current+1)+'/'+parts[1];
+      }
+    }
+    // Ajouter l'événement séquence
+    const seqEvent={id:uid(),type:'sequence',timestamp:new Date().toISOString(),...ctxSnap()};
+    state.entries.push(seqEvent);
+    pendingSequence=false;
+    save();
+    renderAccueil();
+  }
+  
+  hideSampleAlert(); 
+  toast('Échantillon + Séquence enregistrés ✓');
+  go('accueil');
 }
 
 /* ============================================================
@@ -976,11 +1002,8 @@ function renderParam(){
   if(state.production){ ['pPiece','pBT','pPresse','pQty','pSeq','pSilo'].forEach((id,i)=>{
     document.getElementById(id).value=[state.production.piece,state.production.bt,state.production.presse,state.production.qtyPerBox,state.production.sequence,state.production.silo][i]||''; }); }
   document.getElementById('reminderMin').value=state.reminderMin;
+  document.getElementById('samplePerSequence').checked=state.samplePerSequence||false;
   document.getElementById('gsUrl').value=state.gsUrl;
-  document.getElementById('opList').innerHTML=state.operateurs.map((o,i)=>li(o,`removeOp(${i})`)).join('')||hint('Aucun opérateur');
-  document.getElementById('causeList').innerHTML=state.causes.map((c,i)=>li(`#${c.code} ${c.desc}`,`removeCause(${i})`)).join('');
-  document.getElementById('stopList').innerHTML=state.stops.map((s,i)=>li(`${s.code} — ${s.desc}`,`removeStop(${i})`)).join('');
-  document.getElementById('critList').innerHTML=state.criteria.map((c,i)=>li(c,`removeCrit(${i})`)).join('')||hint('Aucun critère');
   setTimeout(()=>document.getElementById('scanInput')?.focus(),100);
 }
 const li=(txt,fn)=>`<div class="list-item"><span style="font-size:14px">${txt}</span><button class="del" onclick="${fn}">Retirer</button></div>`;
