@@ -290,6 +290,7 @@
       <span><span class="lg-symbol" style="color:var(--accent);">✕</span> Non conforme</span>
       <span><span class="lg-symbol" style="color:var(--muted);">○</span> À venir</span>
       <span><span class="lg-symbol" style="color:var(--amber);">!</span> En retard</span>
+      <span><span class="lg-symbol" style="font-size:11px;color:var(--muted);">C.Q.</span> Contrôle Qualité</span>
       <span><span class="lg-symbol" style="color:#7FB3FF;">▼│▲</span> Maintenant</span>
     </div>
     <div class="tl-wrap"><div class="tl-inner" id="timeline"></div></div>
@@ -319,16 +320,14 @@
   <div class="screen" id="s-ech">
     <h2 class="scr-title"><span class="ico" style="color:var(--green)">⚗</span> Échantillon qualité</h2>
     <div class="card">
-      <span class="label">Type de saisie</span>
-      <div style="display:flex; gap:12px; margin-bottom:14px;">
-        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-          <input type="radio" name="echType" value="prod" checked onchange="setEchType('prod')">
-          <span style="font-size:14px;">Échantillon PROD</span>
-        </label>
-        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-          <input type="radio" name="echType" value="cq" onchange="setEchType('cq')">
-          <span style="font-size:14px;">Tournée C.Q.</span>
-        </label>
+      <span class="label">Type d'échantillon</span>
+      <div style="display:flex; gap:10px; margin-bottom:14px;" id="echTypeSelector">
+        <div onclick="setEchType('prod')" style="flex:1; padding:12px; border:2px solid var(--border); border-radius:10px; text-align:center; cursor:pointer; background:var(--panel2);" class="ech-type-box" data-type="prod">
+          <span style="font-weight:700;">Échantillon production</span>
+        </div>
+        <div onclick="setEchType('cq')" style="flex:1; padding:12px; border:2px solid var(--border); border-radius:10px; text-align:center; cursor:pointer; background:var(--panel2);" class="ech-type-box" data-type="cq">
+          <span style="font-weight:700;">Tournée C.Q.</span>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -791,7 +790,15 @@ function saveSilo(){
    ÉCHANTILLONS
    ============================================================ */
 let echConform=null, echCrit={}, echType='prod';
-function setEchType(t){ echType=t; }
+function setEchType(t){ 
+  echType=t; 
+  // Mettre à jour la sélection visuelle
+  document.querySelectorAll('.ech-type-box').forEach(box=>{
+    const isSelected = box.getAttribute('data-type') === t;
+    box.style.borderColor = isSelected ? 'var(--accent)' : 'var(--border)';
+    box.style.background = isSelected ? 'rgba(255,150,0,0.1)' : 'var(--panel2)';
+  });
+}
 function cancelEch(){
   if(pendingSequence){
     pendingSequence=false;
@@ -803,10 +810,21 @@ function renderEch(){
   echConform=null; echCrit={}; echType='prod';
   document.getElementById('echPoids').value=''; document.getElementById('echComment').value='';
   document.getElementById('chipC').classList.remove('on'); document.getElementById('chipNC').classList.remove('on');
-  document.querySelector('input[name="echType"][value="prod"]').checked=true;
   
-  // Masquer les radio buttons si c'est un échantillon obligatoire
-  document.querySelector('[name="echType"]').parentElement.parentElement.style.display=pendingSequence?'none':'block';
+  // Masquer le sélecteur de type si c'est un échantillon obligatoire
+  const selector = document.getElementById('echTypeSelector');
+  if(selector) selector.parentElement.style.display=pendingSequence?'none':'block';
+  
+  // Initialiser la sélection visuelle
+  document.querySelectorAll('.ech-type-box').forEach(box => {
+    box.style.borderColor = 'var(--border)';
+    box.style.background = 'var(--panel2)';
+  });
+  const prodBox = document.querySelector('[data-type="prod"]');
+  if(prodBox){
+    prodBox.style.borderColor = 'var(--accent)';
+    prodBox.style.background = 'rgba(255,150,0,0.1)';
+  }
   
   document.getElementById('critBlock').innerHTML = state.criteria.length ? '<span class="label">Critères qualité</span>'+
     state.criteria.map((c,i)=>`<span class="chip" id="crit${i}" onclick="toggleCrit(${i})">${c}</span>`).join('') : '';
@@ -988,7 +1006,6 @@ function renderKPI(){
   const rejets=state.entries.filter(e=>e.type==='rejet').reduce((a,e)=>a+(e.qty||0),0);
   const stopPct = totalSec? (stopSec/totalSec*100):0;
   const rejRate = pieces? (rejets/pieces*100):null;
-  const cadence = (pieces&&prodSec>0)? (pieces/(prodSec/3600)):null;
   const NA='<span style="color:var(--muted)">Non disponible</span>';
   const startTime=new Date(p.startTime).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
   const cards=[
@@ -999,8 +1016,7 @@ function renderKPI(){
     ['Temps d\'arrêt', fmtDur(stopSec)],
     ['% d\'arrêt', totalSec?stopPct.toFixed(1)+' %':NA],
     ['Rejets totaux', rejets],
-    ['Taux de rejet', rejRate!=null?rejRate.toFixed(2)+' %':NA],
-    ['Cadence (p/h)', cadence!=null?Math.round(cadence):NA]
+    ['Taux de rejet', rejRate!=null?rejRate.toFixed(2)+' %':NA]
   ];
   g.innerHTML=cards.map(c=>`<div class="kpi"><div class="kv">${c[1]}</div><div class="kl">${c[0]}</div></div>`).join('');
 }
