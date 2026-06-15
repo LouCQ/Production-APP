@@ -433,7 +433,7 @@ let state = {
   operateurs: [],
   causes: SEED_CAUSES.map((d,i)=>({code:i+1, desc:d})),
   stops: SEED_STOPS.map(s=>({code:s[0], desc:s[1]})),
-  criteria: ["Apparence conforme","Couleur conforme","Bavures acceptables"],
+  criteria: [],
   reminderMin: 60,
   samplePerSequence: false,
   gsUrl: "",
@@ -586,6 +586,10 @@ function startRejet(){
     toast('Commencez une production d\'abord (Paramètres → Démarrer)',true); 
     go('param'); return; 
   }
+  if(state.activeStop){ 
+    toast('Machine en arrêt',true); 
+    return; 
+  }
   numBuf="0"; causeSel=null;
   document.getElementById('rejetStep1').style.display='block';
   document.getElementById('rejetStep2').style.display='none';
@@ -689,15 +693,17 @@ function selectAndSaveStop(code){
     stopCode:s.code,stopDesc:s.desc,comment:document.getElementById('modalStopComment')?.value||'',...ctxSnap()};
   state.entries.push(e); save(); pushSheets(e); pendingStop=null;
   closeModal();
+  renderAccueil();  // Mettre à jour immédiatement l'interface
+  renderCtx();      // Mettre à jour le contexte
+  if(document.getElementById('timeline')) renderTimeline();  // Mettre à jour la timeline
   toast('Arrêt enregistré ✓');
 }
 let pendingStop=null;
 function startTick(){ stopTick(); arretInt=setInterval(()=>{ 
   const s=Math.round((Date.now()-new Date(state.activeStop.startTime))/1000); 
   document.getElementById('arretTimer').textContent=fmtDur(s);
-  renderCtx(); // Mettre à jour le chrono dans l'entête
-  // Mettre à jour la timeline si l'utilisateur est sur l'onglet Historique
-  if(document.getElementById('timeline')) renderTimeline();
+  renderCtx(); // Mettre à jour le chrono dans l'entête seulement
+  // Ne pas mettre à jour toute la timeline - laisser l'utilisateur contrôler le scroll
 }, 500); }
 function stopTick(){ if(arretInt) clearInterval(arretInt); arretInt=null; }
 function renderStopTypes(){
@@ -722,6 +728,10 @@ function fmtDur(sec){ const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s
    ============================================================ */
 function setSamplePerSequence(){ state.samplePerSequence=document.getElementById('samplePerSequence').checked; save(); }
 function addSequence(){ 
+  if(state.activeStop){ 
+    toast('Machine en arrêt',true); 
+    return; 
+  }
   if(!state.samplePerSequence){
     // Comportement normal : incrémenter directement
     state.sequences++; 
@@ -794,6 +804,10 @@ function renderEch(){
   document.getElementById('echPoids').value=''; document.getElementById('echComment').value='';
   document.getElementById('chipC').classList.remove('on'); document.getElementById('chipNC').classList.remove('on');
   document.querySelector('input[name="echType"][value="prod"]').checked=true;
+  
+  // Masquer les radio buttons si c'est un échantillon obligatoire
+  document.querySelector('[name="echType"]').parentElement.parentElement.style.display=pendingSequence?'none':'block';
+  
   document.getElementById('critBlock').innerHTML = state.criteria.length ? '<span class="label">Critères qualité</span>'+
     state.criteria.map((c,i)=>`<span class="chip" id="crit${i}" onclick="toggleCrit(${i})">${c}</span>`).join('') : '';
   const list=state.entries.filter(e=>(e.type==='echantillon')&&isToday(e.timestamp)).slice().reverse();
@@ -853,7 +867,23 @@ function hideSampleAlert(){ document.getElementById('sampleAlert').classList.rem
 /* ============================================================
    HISTORIQUE — TIMELINE + KPI
    ============================================================ */
-function renderHist(){ renderTimeline(); renderKPI(); renderEntryList(); }
+function renderHist(){ 
+  renderTimeline(); 
+  renderKPI(); 
+  renderEntryList(); 
+  // Aligner la timeline sur "Maintenant" une seule fois à l'ouverture
+  setTimeout(()=>{
+    const tlWrap=document.querySelector('.tl-wrap');
+    const nowMarker=document.querySelector('.tl-now-marker');
+    if(tlWrap&&nowMarker){
+      // Calculer la position de "Maintenant" au centre de la fenêtre
+      const tlWrapWidth=tlWrap.clientWidth;
+      const nowPos=nowMarker.offsetLeft;
+      const scrollTarget=Math.max(0, nowPos-tlWrapWidth/3);
+      tlWrap.scrollLeft=scrollTarget;
+    }
+  },100);
+}
 function renderTimeline(){
   const tl=document.getElementById('timeline');
   if(!state.production||!state.production.startTime){ tl.innerHTML='<div class="hint" style="padding:20px;">Aucune production active.</div>'; return; }
@@ -891,11 +921,27 @@ function renderTimeline(){
     html+=`<div class="tl-silo" style="left:${left}px" onclick='showDetail(${JSON.stringify(JSON.stringify(e))})'></div>`;
   });
   
-  // Échantillons avec statut
+  // Séquences avec échantillons associés
+  state.entries.filter(e=>e.type==='sequence').forEach(seq=>{
+    const left=x(seq.timestamp);
+    // Chercher l'échantillon le plus proche (dans les 5 secondes)
+    const assocEch=state.entries.find(e=>e.type==='echantillon'&&Math.abs(new Date(e.timestamp).getTime()-new Date(seq.timestamp).getTime())<5000);
+    const symbol=assocEch?(assocEch.conform?'✓':'✕'):'+1';
+    const color=assocEch?(assocEch.conform?'var(--green)':'var(--accent)'):'var(--muted)';
+    const weight=assocEch?` ${assocEch.poids}g`:'';
+    const origin=assocEch?assocEch.origin||'PROD':'';
+    html+=`<div class="tl-sample" style="left:${left}px;color:${color};" onclick='${assocEch?`showDetail(${JSON.stringify(JSON.stringify(assocEch))})`:''}'><div style="font-size:14px;font-weight:700;">${symbol}</div>${origin?`<div style="font-size:10px;">${origin}</div>`:''}${weight?`<div style="font-size:10px;">${weight}</div>`:''}</div>`;
+  });
+  
+  // Échantillons avec statut (affichage théorique des échantillons attendus)
   const sampleFreqMin=state.reminderMin||60;
   const nextSampleTime=state.lastSampleTime?new Date(state.lastSampleTime).getTime()+sampleFreqMin*60000:start+sampleFreqMin*60000;
   for(let t=nextSampleTime;t<=now;t+=sampleFreqMin*60000){
     const sample=state.entries.find(e=>e.type==='echantillon'&&Math.abs(new Date(e.timestamp).getTime()-t)<sampleFreqMin*30000);
+    // Ne pas afficher si c'est déjà associé à une séquence
+    const isAssocToSeq=sample&&state.entries.find(s=>s.type==='sequence'&&Math.abs(new Date(s.timestamp).getTime()-new Date(sample.timestamp).getTime())<5000);
+    if(isAssocToSeq) continue;
+    
     const left=x(new Date(t).toISOString());
     const status=sample?(sample.conform?'ok':'nc'):'future';
     const symbol=status==='ok'?'✓':status==='nc'?'✕':'○';
@@ -944,7 +990,9 @@ function renderKPI(){
   const rejRate = pieces? (rejets/pieces*100):null;
   const cadence = (pieces&&prodSec>0)? (pieces/(prodSec/3600)):null;
   const NA='<span style="color:var(--muted)">Non disponible</span>';
+  const startTime=new Date(p.startTime).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
   const cards=[
+    ['Heure de démarrage', startTime],
     ['Séquences complétées', state.sequences],
     ['Pièces produites', pieces!=null?pieces:NA],
     ['Temps total', fmtDur(totalSec)],
