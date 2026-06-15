@@ -222,7 +222,7 @@
       <div class="big-action ba-rejet" onclick="startRejet()"><span class="bi">▣</span><span class="bt">Ajouter un rejet</span></div>
       <div class="big-action ba-arret" id="arretTile" onclick="toggleArretFromHome()"><span class="bi">⏸</span><span class="bt">Démarrer un arrêt</span></div>
       <div class="big-action ba-seq" onclick="addSequence()"><span class="bi">＋</span><span class="bt">Séquence complétée</span></div>
-      <div class="big-action ba-ech" onclick="go('ech')"><span class="bi">⚗</span><span class="bt">Échantillon</span></div>
+      <div class="big-action ba-ech" onclick="go('ech')"><span class="bi"><svg width="1em" height="1em" viewBox="0 0 24 24" style="vertical-align:-0.12em" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2 L22 12 L12 22 L2 12 Z" stroke="currentColor" stroke-width="1.6" fill="none"/><text x="12" y="16" text-anchor="middle" font-size="11" font-weight="800" fill="currentColor" font-family="system-ui,sans-serif">Q</text></svg></span><span class="bt">Échantillon</span></div>
       <div class="big-action ba-silo" onclick="go('trace')"><span class="bi">⇄</span><span class="bt">Changement silo</span></div>
       <div class="big-action ba-hist" onclick="go('hist')"><span class="bi">▤</span><span class="bt">Historique</span></div>
     </div>
@@ -321,7 +321,7 @@
 
   <!-- ECHANTILLONS -->
   <div class="screen" id="s-ech">
-    <h2 class="scr-title"><span class="ico" style="color:var(--green)">⚗</span> Échantillon qualité</h2>
+    <h2 class="scr-title"><span class="ico" style="color:var(--green)"><svg width="1em" height="1em" viewBox="0 0 24 24" style="vertical-align:-0.12em" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2 L22 12 L12 22 L2 12 Z" stroke="currentColor" stroke-width="1.6" fill="none"/><text x="12" y="16" text-anchor="middle" font-size="11" font-weight="800" fill="currentColor" font-family="system-ui,sans-serif">Q</text></svg></span> Échantillon qualité</h2>
     <div class="card">
       <span class="label">Type d'échantillon</span>
       <div style="display:flex; gap:10px; margin-bottom:14px;" id="echTypeSelector">
@@ -410,7 +410,7 @@
     <button data-s="arret" onclick="go('arret')"><span class="ti">⏸</span>Arrêts</button>
     <button data-s="hist" onclick="go('hist')"><span class="ti">▤</span>Historique</button>
     <button data-s="trace" onclick="go('trace')"><span class="ti">⇄</span>Traçabilité</button>
-    <button data-s="ech" onclick="go('ech')"><span class="ti">⚗</span>Échant.</button>
+    <button data-s="ech" onclick="go('ech')"><span class="ti"><svg width="1em" height="1em" viewBox="0 0 24 24" style="vertical-align:-0.12em" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2 L22 12 L12 22 L2 12 Z" stroke="currentColor" stroke-width="1.6" fill="none"/><text x="12" y="16" text-anchor="middle" font-size="11" font-weight="800" fill="currentColor" font-family="system-ui,sans-serif">Q</text></svg></span>Échant.</button>
     <button data-s="param" onclick="go('param')"><span class="ti">⚙</span>Param.</button>
   </div>
 </div>
@@ -955,36 +955,48 @@ function renderTimeline(){
     html+=`<div class="tl-sample" style="left:${left}px;color:${color};" onclick='${assocEch?`showDetail(${JSON.stringify(JSON.stringify(assocEch))})`:''}'><div style="font-size:14px;font-weight:700;">${symbol}</div>${origin?`<div style="font-size:10px;">${origin}</div>`:''}${weight?`<div style="font-size:10px;">${weight}</div>`:''}</div>`;
   });
   
-  // Échantillons horaires aux HEURES FIXES (08:00, 09:00...) selon la fréquence
+  // ===== ÉCHANTILLONS =====
   const sampleFreqMin=state.reminderMin||60;
-  // Premier point horaire fixe après le démarrage
+  
+  // Helper : un échantillon est-il associé à une séquence ?
+  const isAssocToSeq=(sample)=>state.entries.some(s=>s.type==='sequence'&&Math.abs(new Date(s.timestamp).getTime()-new Date(sample.timestamp).getTime())<5000);
+  
+  // 1) Afficher TOUS les échantillons réels à leur heure EXACTE (jamais perdus)
+  const realSamples=state.entries.filter(e=>e.type==='echantillon'&&!isAssocToSeq(e))
+    .slice().sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
+  let lastSampleX=-999;
+  realSamples.forEach(sample=>{
+    let left=x(sample.timestamp);
+    // Anti-chevauchement : si trop proche du précédent, décaler vers la droite
+    if(left-lastSampleX<26){ left=lastSampleX+26; }
+    lastSampleX=left;
+    let status='future', symbol='○';
+    if(sample.conform===true){ status='ok'; symbol='✓'; }
+    else if(sample.conform===false){ status='nc'; symbol='✕'; }
+    const time=new Date(sample.timestamp).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
+    const origin=sample.origin==='C.Q.'?'C.Q.':'';
+    html+=`<div class="tl-sample ${status}" style="left:${left}px" onclick='showDetail(${JSON.stringify(JSON.stringify(sample))})'><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div>${origin?`<div style="font-size:10px; color:inherit; margin-top:2px;">${origin}</div>`:''}</div>`;
+  });
+  
+  // 2) Emplacements horaires théoriques (heures fixes) — seulement si AUCUN échantillon réel proche
   const firstSample=new Date(start);
   firstSample.setMinutes(0,0,0);
-  // Avancer au prochain multiple de la fréquence (en minutes depuis minuit)
   while(firstSample.getTime()<=start){
     firstSample.setMinutes(firstSample.getMinutes()+sampleFreqMin);
   }
   
   for(let t=firstSample.getTime(); t<=now+sampleFreqMin*60000; t+=sampleFreqMin*60000){
-    // Chercher un échantillon réel proche de cette heure (±demi-fréquence)
-    const sample=state.entries.find(e=>e.type==='echantillon'&&Math.abs(new Date(e.timestamp).getTime()-t)<sampleFreqMin*30000);
-    // Ne pas afficher si c'est déjà associé à une séquence
-    const isAssocToSeq=sample&&state.entries.find(s=>s.type==='sequence'&&Math.abs(new Date(s.timestamp).getTime()-new Date(sample.timestamp).getTime())<5000);
-    if(isAssocToSeq) continue;
+    // Y a-t-il déjà un échantillon réel proche de cette heure ? (±demi-fréquence)
+    const hasRealSample=state.entries.some(e=>e.type==='echantillon'&&Math.abs(new Date(e.timestamp).getTime()-t)<sampleFreqMin*30000);
+    if(hasRealSample) continue; // déjà affiché à l'étape 1
     
     const left=x(new Date(t).toISOString());
     let status='future', symbol='○';
-    if(sample){
-      if(sample.conform===true){ status='ok'; symbol='✓'; }
-      else if(sample.conform===false){ status='nc'; symbol='✕'; }
-    } else {
-      // Pas encore saisi : vérifier le retard (>5 min après l'heure prévue)
-      const lateMin=(now-t)/60000;
-      if(lateMin>5){ status='late'; symbol='!'; }
-    }
+    // Pas encore saisi : vérifier le retard (>5 min après l'heure prévue)
+    const lateMin=(now-t)/60000;
+    if(lateMin>5){ status='late'; symbol='!'; }
     const time=new Date(t).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
-    const origin=sample&&sample.origin==='C.Q.'?'C.Q.':'';
-    html+=`<div class="tl-sample ${status}" style="left:${left}px" onclick='${sample?`showDetail(${JSON.stringify(JSON.stringify(sample))})`:''}'><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div>${origin?`<div style="font-size:10px; color:inherit; margin-top:2px;">${origin}</div>`:''}</div>`;
+    html+=`<div class="tl-sample ${status}" style="left:${left}px"><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div></div>`;
   }
   
   // Maintenant — un seul marqueur
