@@ -414,7 +414,7 @@
   <div id="tabbar">
     <button data-s="accueil" class="on" onclick="go('accueil')"><span class="ti">⌂</span>Accueil</button>
     <button data-s="rejet" onclick="startRejet()"><span class="ti">▣</span>Rejets</button>
-    <button data-s="arret" onclick="go('arret')"><span class="ti">⏸</span>Arrêts</button>
+    <button data-s="arret" onclick="go('arret')"><span class="ti">‖</span>Arrêts</button>
     <button data-s="hist" onclick="go('hist')"><span class="ti">▤</span>Historique</button>
     <button data-s="trace" onclick="go('trace')"><span class="ti">⇄</span>Traçabilité</button>
     <button data-s="ech" onclick="go('ech')"><span class="ti"><svg width="1em" height="1em" viewBox="0 0 24 24" style="vertical-align:-0.12em" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2 L22 12 L12 22 L2 12 Z" stroke="currentColor" stroke-width="1.6" fill="none"/><text x="12" y="16" text-anchor="middle" font-size="11" font-weight="800" fill="currentColor" font-family="system-ui,sans-serif">Q</text></svg></span>Échant.</button>
@@ -759,23 +759,66 @@ function addSequence(){
     renderCtx();
     toast('Séquence +1 ✓'); 
   } else {
-    // Avec échantillon obligatoire : afficher le formulaire
-    pendingSequence=true;
-    echConform=null; echCrit={}; echType='prod';
-    document.getElementById('echPoids').value=''; 
-    document.getElementById('echComment').value='';
-    document.getElementById('chipC').classList.remove('on'); 
-    document.getElementById('chipNC').classList.remove('on');
-    document.querySelector('input[name="echType"][value="prod"]').checked=true;
-    
-    // Modifier le bouton pour valider la séquence + échantillon
-    const saveBtn=document.querySelector('#s-ech .btn-green');
-    saveBtn.textContent='✓ Confirmer séquence + échantillon';
-    saveBtn.id='seqEchButton';
-    
-    go('ech');
-    toast('Remplissez l\'échantillon pour cette séquence');
+    // Avec échantillon obligatoire : ouvrir le modal dédié (contrôle obligatoire bulletproof)
+    openSequenceSampleModal();
   }
+}
+
+// Modal dédié pour l'échantillon obligatoire de séquence (toujours PROD)
+let seqSampleConform=null;
+function openSequenceSampleModal(){
+  seqSampleConform=null;
+  const title=document.getElementById('modalTitle');
+  const body=document.getElementById('modalBody');
+  title.textContent='Échantillon requis — Séquence';
+  body.innerHTML=`
+    <div style="color:var(--muted); font-size:13px; margin-bottom:14px;">Cet échantillon est obligatoire pour compléter la séquence.</div>
+    <span class="label">Poids (grammes)</span>
+    <input id="seqEchPoids" inputmode="decimal" placeholder="ex: 124.5" style="width:100%; margin-bottom:14px;">
+    <span class="label">Conformité</span>
+    <div style="display:flex; gap:10px; margin:8px 0 14px;">
+      <span class="chip" id="seqChipC" onclick="setSeqConform(true)" style="flex:1; text-align:center;">✓ Conforme</span>
+      <span class="chip" id="seqChipNC" onclick="setSeqConform(false)" style="flex:1; text-align:center;">✗ Non conforme</span>
+    </div>
+    <span class="label">Commentaire (optionnel)</span>
+    <textarea id="seqEchComment" placeholder="Observation…" style="width:100%; margin-bottom:14px;"></textarea>
+    <button class="btn btn-green" onclick="confirmSequenceSample()">✓ Confirmer séquence + échantillon</button>
+    <button class="btn btn-ghost" style="margin-top:10px;" onclick="closeModal()">Annuler (la séquence ne sera pas comptée)</button>
+  `;
+  document.getElementById('modalBg').classList.add('show');
+}
+function setSeqConform(v){
+  seqSampleConform=v;
+  document.getElementById('seqChipC').classList.toggle('on', v===true);
+  document.getElementById('seqChipNC').classList.toggle('on', v===false);
+}
+function confirmSequenceSample(){
+  if(seqSampleConform===null){ toast('Indiquez conforme / non conforme',true); return; }
+  const ts=new Date().toISOString();
+  // Échantillon (toujours PROD pour une séquence)
+  const ech={id:uid(),type:'echantillon',timestamp:ts,
+    poids:document.getElementById('seqEchPoids').value.trim(),
+    conform:seqSampleConform,criteres:{},
+    comment:document.getElementById('seqEchComment').value.trim(),
+    origin:'PROD',...ctxSnap()};
+  state.entries.push(ech); state.lastSampleTime=ts;
+  // Incrémenter la séquence
+  state.sequences++;
+  if(state.production?.sequence){
+    const parts=state.production.sequence.split('/');
+    if(parts.length===2){
+      const current=parseInt(parts[0])||0;
+      state.production.sequence=(current+1)+'/'+parts[1];
+    }
+  }
+  // Événement séquence lié (même timestamp pour association fiable)
+  const seqEvent={id:uid(),type:'sequence',timestamp:ts,linkedSampleId:ech.id,...ctxSnap()};
+  state.entries.push(seqEvent);
+  save(); pushSheets(ech);
+  closeModal();
+  hideSampleAlert();
+  renderAccueil(); renderCtx();
+  toast('Séquence +1 + échantillon enregistrés ✓');
 }
 
 /* ============================================================
@@ -851,12 +894,15 @@ function toggleCrit(i){ echCrit[state.criteria[i]]=!echCrit[state.criteria[i]];
   document.getElementById('crit'+i).classList.toggle('on',echCrit[state.criteria[i]]); }
 function saveEch(){
   if(echConform===null){ toast('Indiquez conforme / non conforme',true); return; }
+  const wasSequence = pendingSequence;  // capturer avant réinitialisation
+  // Un échantillon obligatoire de séquence est TOUJOURS un échantillon PROD (jamais C.Q.)
+  const origin = wasSequence ? 'PROD' : (echType==='cq' ? 'C.Q.' : 'PROD');
   const e={id:uid(),type:'echantillon',timestamp:new Date().toISOString(),
-    poids:val('echPoids'),conform:echConform,criteres:echCrit,comment:val('echComment'),origin:echType==='cq'?'C.Q.':'PROD',...ctxSnap()};
+    poids:val('echPoids'),conform:echConform,criteres:echCrit,comment:val('echComment'),origin:origin,...ctxSnap()};
   state.entries.push(e); state.lastSampleTime=e.timestamp; save(); pushSheets(e);
   
   // Si c'est un échantillon obligatoire pour une séquence
-  if(pendingSequence){
+  if(wasSequence){
     state.sequences++; 
     if(state.production?.sequence){
       const parts=state.production.sequence.split('/');
@@ -874,7 +920,7 @@ function saveEch(){
   }
   
   hideSampleAlert(); 
-  toast('Échantillon + Séquence enregistrés ✓');
+  toast(wasSequence?'Échantillon + Séquence enregistrés ✓':'Échantillon enregistré ✓');
   go('accueil');
 }
 
@@ -958,8 +1004,9 @@ function renderTimeline(){
   
   const sampleFreqMin=state.reminderMin||60;
   
-  // Helper : un échantillon est-il associé à une séquence ?
-  const isAssocToSeq=(sample)=>state.entries.some(s=>s.type==='sequence'&&Math.abs(new Date(s.timestamp).getTime()-new Date(sample.timestamp).getTime())<5000);
+  // Helper : un échantillon est-il associé à une séquence ? (par ID explicite ou proximité de temps)
+  const linkedIds=new Set(state.entries.filter(e=>e.type==='sequence'&&e.linkedSampleId).map(e=>e.linkedSampleId));
+  const isAssocToSeq=(sample)=>linkedIds.has(sample.id)||state.entries.some(s=>s.type==='sequence'&&!s.linkedSampleId&&Math.abs(new Date(s.timestamp).getTime()-new Date(sample.timestamp).getTime())<5000);
   
   // Suivi anti-chevauchement séparé par plage
   let lastX={prod:-999, cq:-999};
@@ -972,7 +1019,9 @@ function renderTimeline(){
   // 1) Séquences (avec échantillon obligatoire associé) — toujours dans la plage PROD
   state.entries.filter(e=>e.type==='sequence').slice().sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp)).forEach(seq=>{
     let left=placeSample(x(seq.timestamp),'prod');
-    const assocEch=state.entries.find(e=>e.type==='echantillon'&&Math.abs(new Date(e.timestamp).getTime()-new Date(seq.timestamp).getTime())<5000);
+    // Association fiable : par ID explicite, sinon fallback sur la proximité de temps
+    let assocEch=seq.linkedSampleId ? state.entries.find(e=>e.id===seq.linkedSampleId)
+      : state.entries.find(e=>e.type==='echantillon'&&Math.abs(new Date(e.timestamp).getTime()-new Date(seq.timestamp).getTime())<5000);
     const symbol=assocEch?(assocEch.conform===true?'✓':assocEch.conform===false?'✕':'○'):'';
     const color=assocEch?(assocEch.conform===true?'var(--green)':assocEch.conform===false?'var(--accent)':'var(--muted)'):'var(--muted)';
     const weight=assocEch&&assocEch.poids?` ${assocEch.poids}g`:'';
