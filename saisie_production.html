@@ -228,7 +228,7 @@
     <div class="home-actions">
       <div class="big-action ba-rejet" onclick="startRejet()"><span class="bi">▣</span><span class="bt">Ajouter un rejet</span></div>
       <div class="big-action ba-arret" id="arretTile" onclick="toggleArretFromHome()"><span class="bi">⏸</span><span class="bt">Démarrer un arrêt</span></div>
-      <div class="big-action ba-seq" onclick="addSequence()"><span class="bi">＋</span><span class="bt">Séquence complétée</span></div>
+      <div class="big-action ba-seq" onclick="addSequence()"><span class="bi">＋</span><span class="bt">+1 séquence complétée</span></div>
       <div class="big-action ba-ech" onclick="go('ech')"><span class="bi"><svg width="1em" height="1em" viewBox="0 0 24 24" style="vertical-align:-0.12em" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2 L22 12 L12 22 L2 12 Z" stroke="currentColor" stroke-width="1.6" fill="none"/><text x="12" y="16" text-anchor="middle" font-size="11" font-weight="800" fill="currentColor" font-family="system-ui,sans-serif">Q</text></svg></span><span class="bt">Échantillon</span></div>
       <div class="big-action ba-silo" onclick="go('trace')"><span class="bi">⇄</span><span class="bt">Changement silo</span></div>
       <div class="big-action ba-hist" onclick="go('hist')"><span class="bi">▤</span><span class="bt">Historique</span></div>
@@ -736,6 +736,19 @@ function fmtDur(sec){ const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s
    SÉQUENCES
    ============================================================ */
 function setSamplePerSequence(){ state.samplePerSequence=document.getElementById('samplePerSequence').checked; save(); }
+// Incrémente la séquence affichée dans l'entête, gère les formats "X/Y" et "X" simple
+function incrementSequenceDisplay(){
+  if(!state.production?.sequence) return;
+  const seq=String(state.production.sequence).trim();
+  const parts=seq.split('/');
+  if(parts.length===2){
+    const current=parseInt(parts[0])||0;
+    state.production.sequence=(current+1)+'/'+parts[1].trim();
+  } else {
+    const num=parseInt(seq);
+    if(!isNaN(num)) state.production.sequence=String(num+1);
+  }
+}
 function addSequence(){ 
   if(state.activeStop){ 
     toast('Machine en arrêt',true); 
@@ -744,13 +757,7 @@ function addSequence(){
   if(!state.samplePerSequence){
     // Comportement normal : incrémenter directement
     state.sequences++; 
-    if(state.production?.sequence){
-      const parts=state.production.sequence.split('/');
-      if(parts.length===2){
-        const current=parseInt(parts[0])||0;
-        state.production.sequence=(current+1)+'/'+parts[1];
-      }
-    }
+    incrementSequenceDisplay();
     // Ajouter l'événement dans l'historique
     const e={id:uid(),type:'sequence',timestamp:new Date().toISOString(),...ctxSnap()};
     state.entries.push(e);
@@ -804,13 +811,7 @@ function confirmSequenceSample(){
   state.entries.push(ech); state.lastSampleTime=ts;
   // Incrémenter la séquence
   state.sequences++;
-  if(state.production?.sequence){
-    const parts=state.production.sequence.split('/');
-    if(parts.length===2){
-      const current=parseInt(parts[0])||0;
-      state.production.sequence=(current+1)+'/'+parts[1];
-    }
-  }
+  incrementSequenceDisplay();
   // Événement séquence lié (même timestamp pour association fiable)
   const seqEvent={id:uid(),type:'sequence',timestamp:ts,linkedSampleId:ech.id,...ctxSnap()};
   state.entries.push(seqEvent);
@@ -853,10 +854,6 @@ function setEchType(t){
   });
 }
 function cancelEch(){
-  if(pendingSequence){
-    pendingSequence=false;
-    toast('Saisie d\'échantillon annulée');
-  }
   go('accueil');
 }
 function renderEch(){
@@ -864,11 +861,11 @@ function renderEch(){
   document.getElementById('echPoids').value=''; document.getElementById('echComment').value='';
   document.getElementById('chipC').classList.remove('on'); document.getElementById('chipNC').classList.remove('on');
   
-  // Masquer le sélecteur de type si c'est un échantillon obligatoire
+  // Le sélecteur PROD/C.Q. est toujours visible dans l'onglet Échant.
   const selector = document.getElementById('echTypeSelector');
-  if(selector) selector.parentElement.style.display=pendingSequence?'none':'block';
+  if(selector) selector.parentElement.style.display='block';
   
-  // Initialiser la sélection visuelle
+  // Initialiser la sélection visuelle (PROD par défaut)
   document.querySelectorAll('.ech-type-box').forEach(box => {
     box.style.borderColor = 'var(--border)';
     box.style.background = 'var(--panel2)';
@@ -884,8 +881,9 @@ function renderEch(){
   const list=state.entries.filter(e=>(e.type==='echantillon')&&isToday(e.timestamp)).slice().reverse();
   document.getElementById('echList').innerHTML = list.length? list.map(e=>entryRow(e)).join('') : '<div class="hint">Aucun échantillon aujourd\'hui.</div>';
   
-  // Afficher le bouton d'annulation si on est en mode séquence obligatoire
-  document.getElementById('echCancelBtn').style.display=pendingSequence?'block':'none';
+  // Le bouton d'annulation n'est plus nécessaire (séquences gérées par modal)
+  const cancelBtn=document.getElementById('echCancelBtn');
+  if(cancelBtn) cancelBtn.style.display='none';
 }
 function setConform(v){ echConform=v;
   document.getElementById('chipC').classList.toggle('on',v===true);
@@ -894,33 +892,12 @@ function toggleCrit(i){ echCrit[state.criteria[i]]=!echCrit[state.criteria[i]];
   document.getElementById('crit'+i).classList.toggle('on',echCrit[state.criteria[i]]); }
 function saveEch(){
   if(echConform===null){ toast('Indiquez conforme / non conforme',true); return; }
-  const wasSequence = pendingSequence;  // capturer avant réinitialisation
-  // Un échantillon obligatoire de séquence est TOUJOURS un échantillon PROD (jamais C.Q.)
-  const origin = wasSequence ? 'PROD' : (echType==='cq' ? 'C.Q.' : 'PROD');
+  const origin = echType==='cq' ? 'C.Q.' : 'PROD';
   const e={id:uid(),type:'echantillon',timestamp:new Date().toISOString(),
     poids:val('echPoids'),conform:echConform,criteres:echCrit,comment:val('echComment'),origin:origin,...ctxSnap()};
   state.entries.push(e); state.lastSampleTime=e.timestamp; save(); pushSheets(e);
-  
-  // Si c'est un échantillon obligatoire pour une séquence
-  if(wasSequence){
-    state.sequences++; 
-    if(state.production?.sequence){
-      const parts=state.production.sequence.split('/');
-      if(parts.length===2){
-        const current=parseInt(parts[0])||0;
-        state.production.sequence=(current+1)+'/'+parts[1];
-      }
-    }
-    // Ajouter l'événement séquence
-    const seqEvent={id:uid(),type:'sequence',timestamp:new Date().toISOString(),...ctxSnap()};
-    state.entries.push(seqEvent);
-    pendingSequence=false;
-    save();
-    renderAccueil();
-  }
-  
   hideSampleAlert(); 
-  toast(wasSequence?'Échantillon + Séquence enregistrés ✓':'Échantillon enregistré ✓');
+  toast('Échantillon enregistré ✓');
   go('accueil');
 }
 
