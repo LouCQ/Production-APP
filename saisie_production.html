@@ -37,7 +37,10 @@
     border-radius:12px; padding:12px 14px; font-weight:700; align-items:center; gap:10px;}
   #sampleAlert.show{display:flex;}
   #sampleAlert button{margin-left:auto; background:#3a2400; color:#fff; border:none;
-    padding:8px 14px; border-radius:8px; font-weight:700; font-size:14px;}
+    padding:8px 14px; border-radius:8px; font-weight:700; font-size:14px; white-space:nowrap;}
+  #sampleAlert.late{background:var(--accent); color:#fff; animation:alertPulse 1.4s ease-in-out infinite;}
+  #sampleAlert.late button{background:#fff; color:var(--accent);}
+  @keyframes alertPulse{0%,100%{opacity:1;} 50%{opacity:.72;}}
 
   .screen{display:none; padding:14px;}
   .screen.active{display:block;}
@@ -219,7 +222,7 @@
   <!-- Rappel échantillon -->
   <div id="sampleAlert">
     <span id="sampleAlertText">Échantillon horaire requis</span>
-    <button onclick="go('ech')">Saisir</button>
+    <button onclick="openHourlySampleFromAlert()">Saisir</button>
   </div>
 
   <!-- ACCUEIL -->
@@ -904,16 +907,105 @@ function saveEch(){
 /* ============================================================
    RAPPEL HORAIRE ÉCHANTILLON
    ============================================================ */
-function checkSampleReminder(){
-  if(!state.production) return hideSampleAlert();
-  const last = state.lastSampleTime ? new Date(state.lastSampleTime) : new Date(state.production.startTime);
-  const mins=(Date.now()-last)/60000;
-  if(mins>=state.reminderMin){
-    document.getElementById('sampleAlertText').textContent=`Échantillon requis (dernier il y a ${Math.round(mins)} min)`;
-    document.getElementById('sampleAlert').classList.add('show');
-  } else hideSampleAlert();
+// Calcule les heures fixes attendues encore non saisies (dues ou en retard)
+function getOverdueSamples(){
+  if(!state.production||!state.production.startTime) return [];
+  const start=new Date(state.production.startTime).getTime();
+  const now=Date.now();
+  const freq=state.reminderMin||60;
+  // Premier point horaire fixe après le démarrage
+  const first=new Date(start); first.setMinutes(0,0,0);
+  while(first.getTime()<=start){ first.setMinutes(first.getMinutes()+freq); }
+  const overdue=[];
+  for(let t=first.getTime(); t<=now; t+=freq*60000){
+    // Existe-t-il déjà un échantillon PROD proche de cette heure ?
+    const filled=state.entries.some(e=>e.type==='echantillon'&&e.origin!=='C.Q.'&&Math.abs(new Date(e.timestamp).getTime()-t)<freq*30000);
+    if(!filled) overdue.push(t);
+  }
+  return overdue;
 }
-function hideSampleAlert(){ document.getElementById('sampleAlert').classList.remove('show'); }
+
+function checkSampleReminder(){
+  if(!state.production){ return hideSampleAlert(); }
+  if(state.activeStop){ return hideSampleAlert(); } // pas d'alerte pendant un arrêt
+  const overdue=getOverdueSamples();
+  if(overdue.length===0){ return hideSampleAlert(); }
+  // Afficher l'alerte pour le plus ancien test dû/en retard
+  const oldest=overdue[0];
+  const now=Date.now();
+  const lateMin=Math.round((now-oldest)/60000);
+  const hh=new Date(oldest).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
+  const alert=document.getElementById('sampleAlert');
+  const txt=document.getElementById('sampleAlertText');
+  const extra=overdue.length>1?` (+${overdue.length-1} autre${overdue.length-1>1?'s':''})`:'';
+  if(lateMin>5){
+    txt.textContent=`⚠ Test horaire de ${hh} EN RETARD (${lateMin} min)${extra}`;
+    alert.classList.add('late');
+  } else {
+    txt.textContent=`Test horaire de ${hh} requis${extra}`;
+    alert.classList.remove('late');
+  }
+  alert.dataset.scheduled=oldest;
+  alert.classList.add('show');
+}
+function hideSampleAlert(){ const a=document.getElementById('sampleAlert'); a.classList.remove('show'); a.classList.remove('late'); }
+
+// Saisir le test horaire dû/en retard (ouvre un modal dédié)
+let hourlyScheduled=null, hourlyConform=null;
+function openHourlySampleFromAlert(){
+  const sched=parseInt(document.getElementById('sampleAlert').dataset.scheduled);
+  if(!sched){ return; }
+  if(state.activeStop){ toast('Machine en arrêt',true); return; }
+  hourlyScheduled=sched; hourlyConform=null;
+  const hh=new Date(sched).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
+  const now=Date.now();
+  const lateMin=Math.round((now-sched)/60000);
+  const lateNote=lateMin>5?`<div style="color:var(--amber); font-size:13px; margin-bottom:10px;">⚠ Saisie tardive — prévu à ${hh}, saisi maintenant (retard ${lateMin} min). L'heure réelle sera enregistrée.</div>`:'';
+  const title=document.getElementById('modalTitle');
+  const body=document.getElementById('modalBody');
+  title.textContent=`Test horaire — ${hh}`;
+  body.innerHTML=`
+    ${lateNote}
+    <span class="label">Poids (grammes)</span>
+    <input id="hourlyPoids" inputmode="decimal" placeholder="ex: 124.5" style="width:100%; margin-bottom:14px;">
+    <span class="label">Conformité</span>
+    <div style="display:flex; gap:10px; margin:8px 0 14px;">
+      <span class="chip" id="hourlyChipC" onclick="setHourlyConform(true)" style="flex:1; text-align:center;">✓ Conforme</span>
+      <span class="chip" id="hourlyChipNC" onclick="setHourlyConform(false)" style="flex:1; text-align:center;">✗ Non conforme</span>
+    </div>
+    <span class="label">Commentaire (optionnel)</span>
+    <textarea id="hourlyComment" placeholder="Observation…" style="width:100%; margin-bottom:14px;"></textarea>
+    <button class="btn btn-green" onclick="confirmHourlySample()">✓ Enregistrer le test</button>
+    <button class="btn btn-ghost" style="margin-top:10px;" onclick="closeModal()">Annuler</button>
+  `;
+  document.getElementById('modalBg').classList.add('show');
+}
+function setHourlyConform(v){
+  hourlyConform=v;
+  document.getElementById('hourlyChipC').classList.toggle('on', v===true);
+  document.getElementById('hourlyChipNC').classList.toggle('on', v===false);
+}
+function confirmHourlySample(){
+  if(hourlyConform===null){ toast('Indiquez conforme / non conforme',true); return; }
+  const now=Date.now();
+  const lateMin=Math.round((now-hourlyScheduled)/60000);
+  const isLate=lateMin>5;
+  // timestamp = heure prévue (pour remplir le créneau), actualTime = heure réelle de saisie
+  const e={id:uid(),type:'echantillon',
+    timestamp:new Date(hourlyScheduled).toISOString(),
+    actualTime:new Date(now).toISOString(),
+    scheduledTime:new Date(hourlyScheduled).toISOString(),
+    late:isLate, lateMin:isLate?lateMin:0,
+    poids:document.getElementById('hourlyPoids').value.trim(),
+    conform:hourlyConform,criteres:{},
+    comment:document.getElementById('hourlyComment').value.trim(),
+    origin:'PROD',...ctxSnap()};
+  state.entries.push(e); state.lastSampleTime=e.actualTime;
+  save(); pushSheets(e);
+  closeModal(); hourlyScheduled=null; hourlyConform=null;
+  checkSampleReminder(); // réévaluer s'il reste des tests dus
+  toast(isLate?'Test horaire enregistré (tardif) ✓':'Test horaire enregistré ✓');
+}
 
 /* ============================================================
    HISTORIQUE — TIMELINE + KPI
@@ -1018,7 +1110,8 @@ function renderTimeline(){
     else if(sample.conform===false){ status='nc'; symbol='✕'; }
     const time=new Date(sample.timestamp).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'});
     const cqMark=isCQ?'<div style="font-size:10px; color:inherit; margin-top:2px;">C.Q.</div>':'';
-    html+=`<div class="tl-sample ${laneClass} ${status}" style="left:${left}px" onclick='showDetail(${JSON.stringify(JSON.stringify(sample))})'><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div>${cqMark}</div>`;
+    const lateMark=sample.late?'<div style="font-size:9px; color:var(--amber); margin-top:1px;">tardif</div>':'';
+    html+=`<div class="tl-sample ${laneClass} ${status}" style="left:${left}px" onclick='showDetail(${JSON.stringify(JSON.stringify(sample))})'><div style="font-size:12px;color:inherit;">${time}</div><div>${symbol}</div>${cqMark}${lateMark}</div>`;
   });
   
   // 3) Emplacements horaires théoriques (heures fixes) — plage PROD, seulement si aucun échantillon réel proche
@@ -1133,7 +1226,10 @@ function showDetail(json){
     h=dl('Heure',t(e.timestamp))+dl('Ancien silo',e.prevSilo)+dl('Nouveau silo',e.silo); }
   else { title.textContent='Détail — Échantillon';
     const crit=Object.entries(e.criteres||{}).map(([k,v])=>`${k}: ${v?'✓':'✗'}`).join('<br>');
-    h=dl('Heure',t(e.timestamp))+dl('Poids',(e.poids||'—')+' g')+dl('Conformité',e.conform?'Conforme':'Non conforme')+dl('Critères',crit)+dl('Commentaire',e.comment); }
+    h=dl('Heure',t(e.timestamp))
+      +(e.origin==='C.Q.'?dl('Origine','Contrôle Qualité (C.Q.)'):dl('Origine','Production'))
+      +(e.late?dl('Saisie','⚠ Tardive — prévu '+new Date(e.scheduledTime||e.timestamp).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'})+', saisi '+new Date(e.actualTime||e.timestamp).toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit'})+' (retard '+e.lateMin+' min)'):'')
+      +dl('Poids',(e.poids||'—')+' g')+dl('Conformité',e.conform?'Conforme':'Non conforme')+dl('Critères',crit)+dl('Commentaire',e.comment); }
   h+=dl('Pièce / BT',[e.piece,e.bt].filter(Boolean).join(' / '))+dl('Presse',e.presse)+dl('Opérateur',e.operateur);
   body.innerHTML=h; document.getElementById('modalBg').classList.add('show');
 }
